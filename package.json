@@ -1,0 +1,21 @@
+{
+  "name": "holst-mcp",
+  "version": "0.2.0",
+  "description": "MCP server for Holst.so — reads and writes to Holst whiteboards via local Electron desktop CDP attach",
+  "type": "module",
+  "main": "src/server.js",
+  "bin": {
+    "holst-mcp": "src/server.js"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "probe": "node src/probe.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
