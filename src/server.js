@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 // Holst MCP server: read & write to Holst.so boards via local desktop CDP.
-// Requires Holst desktop running with --remote-debugging-port=9222 and user logged in.
+// Self-sufficient: auto-starts the app, self-heals mounts, ships its own docs
+// (tool descriptions, holst_reference, holst_doctor, holst://docs/usage).
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 
 import {
@@ -26,34 +29,55 @@ import {
   setColor,
   resizeObject,
   whoAmI,
+  doctor,
 } from './holst.js';
+import { getReference } from './reference.js';
+import { sanitizeError } from './policy.js';
+import { USAGE_DOC } from './docs.js';
 
 const server = new Server(
-  { name: 'holst-mcp', version: '0.2.0' },
-  { capabilities: { tools: {} } }
+  { name: 'holst-mcp', version: '0.3.0' },
+  { capabilities: { tools: {}, resources: {} } }
 );
+
+const ADD_NOTE =
+  'NOTE: takes 3-8s (editor settle) — slow is normal, never retry on slowness. ' +
+  'Result: { ok, id, documentId, mounted, native }; mounted=false = not rendered yet (server self-heals via reload) — verify with holst_get_board_summary. ' +
+  'Coordinates: top-left origin, y grows down.';
 
 const TOOLS = [
   {
     name: 'holst_whoami',
     description:
-      'Возвращает информацию о текущем залогиненном пользователе Holst. Используй для проверки, что MCP подключен и авторизация работает.',
+      'Check the Holst connection: returns the logged-in user. Run this first if anything fails. Never auto-launches anything by itself.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'holst_doctor',
+    description:
+      'Full self-diagnosis: CDP endpoint, Holst app, tabs, auth, editor readiness, latency, effective config. Never throws — returns a report with a human-readable verdict and suggested action. Run this before troubleshooting anything.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'holst_reference',
+    description:
+      'On-demand reference: palette colors, verified shape/arrow types, coordinate conventions, timings, result-field semantics, limits, env vars, do-not list. Cheaper than guessing.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
     name: 'holst_list_boards',
     description:
-      'Список всех досок и папок, доступных пользователю. Возвращает: пользователь, recent boards, и для каждого workspace — дерево досок/папок.',
+      'List all boards and folders across the user\'s workspaces. Returns the user, recent boards, and per-workspace trees. boardId for other tools is a strict UUID from here (or from a board URL).',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
     name: 'holst_get_board_content',
     description:
-      'Полный сырой Yjs-дамп доски: все объекты (стикеры, секции, стрелки, тексты) с координатами, и все документы (тексты). Возвращает { meta, content: { documents, objects, ... } }.',
+      'Full raw dump of a board: all objects (with coordinates) + all document texts. Size-capped by HOLST_MAX_DUMP_BYTES (default 2MB) — for big boards use holst_search_text or holst_get_board_summary instead.',
     inputSchema: {
       type: 'object',
       properties: {
-        boardId: { type: 'string', description: 'UUID доски (из URL board/{id})' },
+        boardId: { type: 'string', description: 'UUID board id' },
       },
       required: ['boardId'],
       additionalProperties: false,
@@ -62,7 +86,7 @@ const TOOLS = [
   {
     name: 'holst_get_board_summary',
     description:
-      'Структурированный markdown-дамп: стикеры сгруппированы по ближайшему shape-заголовку (секции). Удобно для чтения и работы с доской.',
+      'Structured markdown of a board: stickers grouped under nearest section headers. The preferred way to read a board and to VERIFY your own changes (every block must show its text).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -75,12 +99,12 @@ const TOOLS = [
   {
     name: 'holst_search_text',
     description:
-      'Поиск по тексту всех объектов доски (стикеры, секции, простой текст). Возвращает массив совпадений с ID, типом, координатами и сниппетом.',
+      'Case-insensitive substring search across all texts on a board. Returns matches with object id, type, position, snippet. Use for big boards instead of full dumps.',
     inputSchema: {
       type: 'object',
       properties: {
         boardId: { type: 'string' },
-        query: { type: 'string', description: 'Подстрока для поиска (case-insensitive)' },
+        query: { type: 'string', description: 'Substring to search (case-insensitive)' },
       },
       required: ['boardId', 'query'],
       additionalProperties: false,
@@ -89,14 +113,14 @@ const TOOLS = [
   {
     name: 'holst_add_sticker',
     description:
-      'Добавить стикер на доску. Изменения синкаются автоматически. По умолчанию 192×192 в координатах x,y. Требуется чтобы пользователь имел права на запись (admin/editor).',
+      'Add a sticky note with text (default 192x192, yellow). ' + ADD_NOTE,
     inputSchema: {
       type: 'object',
       properties: {
         boardId: { type: 'string' },
-        text: { type: 'string', description: 'Текст стикера' },
-        x: { type: 'number', description: 'X-координата на холсте' },
-        y: { type: 'number', description: 'Y-координата на холсте' },
+        text: { type: 'string', description: 'Sticker text (plain, \\n = new paragraph)' },
+        x: { type: 'number', description: 'Top-left X on canvas' },
+        y: { type: 'number', description: 'Top-left Y on canvas' },
         width: { type: 'number', default: 192 },
         height: { type: 'number', default: 192 },
       },
@@ -107,12 +131,12 @@ const TOOLS = [
   {
     name: 'holst_update_text',
     description:
-      'Изменить текст существующего объекта (стикер, секция-заголовок, простой текст). objectId берётся из get_board_content.',
+      'Replace the text of an existing object (sticker / shape / simple-text). Idempotent — safe to retry once if verification shows the text missing. Takes 2-6s.',
     inputSchema: {
       type: 'object',
       properties: {
         boardId: { type: 'string' },
-        objectId: { type: 'string' },
+        objectId: { type: 'string', description: 'From get_board_content / creation result' },
         text: { type: 'string' },
       },
       required: ['boardId', 'objectId', 'text'],
@@ -121,7 +145,8 @@ const TOOLS = [
   },
   {
     name: 'holst_delete_object',
-    description: 'Удалить объект с доски (стикер, секцию, текст, стрелку). Также удаляет связанный документ.',
+    description:
+      'Delete an object AND its linked text document. Irreversible — confirm intent for bulk deletions.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -135,18 +160,18 @@ const TOOLS = [
   {
     name: 'holst_add_shape',
     description:
-      'Добавить shape (фигуру) с текстовым лейблом — используется для секций-заголовков. По умолчанию белый прямоугольник с серой рамкой 240×48. Для других цветов: yellow6, blue6, green6, red6, orange8, gray12 и т.п.',
+      'Add a shape with a text label (section headers, flow blocks). Verified types: round-rect, square. ' + ADD_NOTE,
     inputSchema: {
       type: 'object',
       properties: {
         boardId: { type: 'string' },
-        text: { type: 'string', description: 'Текст внутри фигуры' },
+        text: { type: 'string', description: 'Label inside the shape' },
         x: { type: 'number' },
         y: { type: 'number' },
         width: { type: 'number', default: 240 },
         height: { type: 'number', default: 48 },
-        shapeType: { type: 'string', default: 'square', description: 'square, circle, round-rect, rhombus, triangle' },
-        fillColor: { type: 'string', default: 'white6' },
+        shapeType: { type: 'string', default: 'square', description: 'round-rect, square (verified); circle, rhombus, triangle exist' },
+        fillColor: { type: 'string', default: 'white6', description: 'Palette name: yellow6, blue6, green6, red6, orange8, gray12, white6...' },
         strokeColor: { type: 'string', default: 'gray12' },
         strokeWidth: { type: 'number', default: 2 },
         fixedSize: { type: 'boolean', default: true },
@@ -157,7 +182,8 @@ const TOOLS = [
   },
   {
     name: 'holst_add_simple_text',
-    description: 'Добавить простой текстовый лейбл (без фона). Размер автоматический по содержимому.',
+    description:
+      'Add a plain text label (no background), auto-sized by content — for step annotations near arrows. ' + ADD_NOTE,
     inputSchema: {
       type: 'object',
       properties: {
@@ -173,24 +199,20 @@ const TOOLS = [
   {
     name: 'holst_add_arrow',
     description:
-      'Добавить стрелку между двумя точками или объектами. Endpoint = либо { x, y } для свободной точки, либо { objectId, relativePoint: { x, y } } для прикрепления к объекту (relativePoint = 0..1, где 0.5/0.5 — центр).',
+      'Connect two points or objects. Endpoint = { x, y } for a free point, or { objectId, relativePoint: { x, y } } to attach (0..1 of object bounds; 0.5/1 = bottom center). Create endpoint objects FIRST — you need their ids.',
     inputSchema: {
       type: 'object',
       properties: {
         boardId: { type: 'string' },
         start: {
           type: 'object',
-          description: '{ x, y } или { objectId, relativePoint: {x, y} }',
+          description: '{ x, y } or { objectId, relativePoint: {x, y} }',
         },
         end: {
           type: 'object',
-          description: '{ x, y } или { objectId, relativePoint: {x, y} }',
+          description: '{ x, y } or { objectId, relativePoint: {x, y} }',
         },
-        arrowType: {
-          type: 'string',
-          default: 'elbow',
-          description: 'elbow, straight, curved',
-        },
+        arrowType: { type: 'string', default: 'elbow', description: 'elbow, straight, curved' },
         strokeColor: { type: 'string', default: 'gray10' },
       },
       required: ['boardId', 'start', 'end'],
@@ -199,7 +221,7 @@ const TOOLS = [
   },
   {
     name: 'holst_move_object',
-    description: 'Переместить объект на новые координаты. Работает для любого типа.',
+    description: 'Move an object to new coordinates (top-left corner). Takes 1-3s.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -214,7 +236,7 @@ const TOOLS = [
   },
   {
     name: 'holst_resize_object',
-    description: 'Изменить размер объекта (для shape, sticker). Передавай width/height/оба.',
+    description: 'Change width and/or height of a shape or sticker.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -230,12 +252,12 @@ const TOOLS = [
   {
     name: 'holst_add_frame',
     description:
-      'Добавить фрейм — большой контейнер с подписью. Используется для группировки содержимого. labelText лежит в самом объекте, без отдельного документа. По умолчанию 800×600, садится ПОД остальные объекты (zIndex отрицательный) чтобы не закрывать контент.',
+      'Add a large labeled container that sits BELOW content (groups a diagram). labelText is a plain field, no separate document. ' + ADD_NOTE,
     inputSchema: {
       type: 'object',
       properties: {
         boardId: { type: 'string' },
-        labelText: { type: 'string', default: 'Frame', description: 'Подпись фрейма' },
+        labelText: { type: 'string', default: 'Frame', description: 'Frame title' },
         x: { type: 'number' },
         y: { type: 'number' },
         width: { type: 'number', default: 800 },
@@ -249,12 +271,12 @@ const TOOLS = [
   {
     name: 'holst_add_stamp',
     description:
-      'Добавить штамп / эмодзи на доску. По умолчанию 60×60. Поле text — любой эмодзи или короткий текст ("❤️", "🔥", "👍", "🐈" и т.п.).',
+      'Add an emoji / text stamp (e.g. "❤️", "🔥"). text = the emoji itself. ' + ADD_NOTE,
     inputSchema: {
       type: 'object',
       properties: {
         boardId: { type: 'string' },
-        text: { type: 'string', description: 'Эмодзи или короткий текст' },
+        text: { type: 'string', description: 'Emoji or short text' },
         x: { type: 'number' },
         y: { type: 'number' },
         width: { type: 'number', default: 60 },
@@ -268,7 +290,7 @@ const TOOLS = [
   {
     name: 'holst_set_color',
     description:
-      'Установить fillColor и/или strokeColor. Цвета — palette-имена (yellow6, blue6, green6, red6, orange8, gray12, white6 и т.п.).',
+      'Set fillColor and/or strokeColor (palette names: yellow6, blue6, green6, red6, orange8, gray12, white6...). Full list: holst_reference.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -285,6 +307,29 @@ const TOOLS = [
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
 
+server.setRequestHandler(ListResourcesRequestSchema, async () => ({
+  resources: [
+    {
+      uri: 'holst://docs/usage',
+      name: 'Holst MCP — Agent Usage Guide',
+      description:
+        'Full operational manual: prerequisites, workflow, conventions, timings, error actions, never-do list, env vars. Read this once before heavy work.',
+      mimeType: 'text/markdown',
+    },
+  ],
+}));
+
+server.setRequestHandler(ReadResourceRequestSchema, async (req) => {
+  if (req.params.uri === 'holst://docs/usage') {
+    return {
+      contents: [
+        { uri: 'holst://docs/usage', mimeType: 'text/markdown', text: USAGE_DOC },
+      ],
+    };
+  }
+  throw new Error('Unknown resource: ' + req.params.uri);
+});
+
 server.setRequestHandler(CallToolRequestSchema, async (req) => {
   const { name, arguments: args = {} } = req.params;
   try {
@@ -292,6 +337,12 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     switch (name) {
       case 'holst_whoami':
         result = await whoAmI();
+        break;
+      case 'holst_doctor':
+        result = await doctor();
+        break;
+      case 'holst_reference':
+        result = getReference();
         break;
       case 'holst_list_boards':
         result = await listBoards();
@@ -353,7 +404,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   } catch (e) {
     return {
       isError: true,
-      content: [{ type: 'text', text: `Error: ${e.message}` }],
+      content: [{ type: 'text', text: `Error: ${sanitizeError(e)}` }],
     };
   }
 });
