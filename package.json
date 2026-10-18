@@ -1,6 +1,6 @@
 {
   "name": "holst-mcp",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "MCP server for Holst.so \u2014 reads and writes to Holst whiteboards via local Electron desktop CDP attach",
   "type": "module",
   "main": "src/server.js",

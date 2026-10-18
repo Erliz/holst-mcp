@@ -33,8 +33,8 @@ describe('buildStyleExtras', () => {
     assert.deepEqual(buildStyleExtras({ textScale: 1.714 }), { textScale: 1.714 });
   });
 
-  test('palette textColor → {color: token, opacity: 1}', () => {
-    assert.deepEqual(buildStyleExtras({ textColor: 'sky10' }), { textColor: { color: 'sky10', opacity: 1 } });
+  test('palette textColor names are rejected (v0.6.0)', () => {
+    assert.throws(() => buildStyleExtras({ textColor: 'sky10' }), /#RRGGBB/);
   });
 
   test('hex textColor → {color: int, opacity: 1}', () => {
@@ -42,7 +42,7 @@ describe('buildStyleExtras', () => {
   });
 
   test('textBackgroundColor same color contract', () => {
-    assert.deepEqual(buildStyleExtras({ textBackgroundColor: 'yellow4' }), { textBackgroundColor: { color: 'yellow4', opacity: 1 } });
+    assert.deepEqual(buildStyleExtras({ textBackgroundColor: '#fff0ee' }), { textBackgroundColor: { color: 0xfff0ee, opacity: 1 } });
   });
 
   test('horizontalAlign: left omitted (default), others kept', () => {
@@ -80,8 +80,8 @@ describe('buildStyleExtras', () => {
     assert.deepEqual(buildStyleExtras({ textColor: '#bf4520', textOpacity: 0.06 }), {
       textColor: { color: 0xbf4520, opacity: 0.06 },
     });
-    assert.deepEqual(buildStyleExtras({ textColor: 'tomato8', textOpacity: 1 }), {
-      textColor: { color: 'tomato8', opacity: 1 },
+    assert.deepEqual(buildStyleExtras({ textColor: '#e54d2e', textOpacity: 1 }), {
+      textColor: { color: 0xe54d2e, opacity: 1 },
     });
   });
 
@@ -90,7 +90,7 @@ describe('buildStyleExtras', () => {
   });
 
   test('textOpacity out of 0..1 rejected', () => {
-    assert.throws(() => buildStyleExtras({ textColor: 'gray12', textOpacity: 1.5 }), ValidationError);
+    assert.throws(() => buildStyleExtras({ textColor: '#202020', textOpacity: 1.5 }), ValidationError);
   });
 
   test('verticalAlign passes through as field', () => {
@@ -128,10 +128,10 @@ describe('segmentsToHtml (runs pipeline)', () => {
   test('multiple runs concatenate in order', () => {
     assert.equal(
       segmentsToHtml([
-        { text: 'Name', marks: { bold: true }, color: 'red10' },
-        { text: ' · sub', marks: { italic: true }, color: 'gray12' },
+        { text: 'Name', marks: { bold: true }, color: 0xe54d2e },
+        { text: ' · sub', marks: { italic: true }, color: 0x202020 },
       ]),
-      '<p><strong><span style="color:red10;">Name</span></strong><em><span style="color:gray12;"> · sub</span></em></p>'
+      '<p><strong><span style="color:#e54d2e;">Name</span></strong><em><span style="color:#202020;"> · sub</span></em></p>'
     );
   });
 

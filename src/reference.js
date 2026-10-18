@@ -2,7 +2,7 @@
 // timings, result semantics, env vars, limits. Call holst_reference
 // instead of guessing — costs no context until requested.
 
-import { SHAPE_TYPES, ARROW_TYPES, STROKE_STYLES } from './validate.js';
+import { SHAPE_TYPES, ARROW_TYPES, STROKE_STYLES, BACKGROUND_STYLES } from './validate.js';
 
 export function getReference() {
   return {
@@ -12,21 +12,23 @@ export function getReference() {
       typicalLayout: 'x 300–1800, y 80–1600 fits one screen; boxes 260×56 with ≥180px vertical gaps work well',
       notes: 'position is the top-left corner of the object; arrows attach via relativePoint {x,y} in 0..1 of the object bounds (0.5/0.5 = center)',
     },
-    paletteColors: [
-      'yellow6', 'blue6', 'green6', 'red6', 'orange8',
-      'gray10', 'gray12', 'white3', 'white6',
-      'sky10', 'yellow4', 'violet10', 'green10',
-    ],
-    paletteFamilies: '23 families x ~12 shades each (from app bundle): gray, tomato, red, crimson, pink, plum, purple, violet, indigo, blue, cyan, teal, jade, green, grass, brown, sky, mint, lime, yellow, amber, orange — e.g. tomato8 = hsl(10,80%,44%) ≈ #ca4b31 (coral). Prefer exact #RRGGBB when precision matters',
+    suggestedColors: {
+      background: '#ffffff',
+      ink: '#202020',
+      muted: '#8d8d8d', line: '#808080',
+      paleWashes: { violet: '#e4defc', blue: '#cee7fe', green: '#c6ecdb', yellow: '#fff8c6' },
+      accents: { red: '#e54d2e', violet: '#6e56cf', cyan: '#05a2c2', green: '#29a383', amber: '#ffc53d' },
+    },
+    colorRendering: 'ALL color params accept #RRGGBB hex only (stored as an int internally; get_board_content normalizes MCP-written ints back to the same hex). Objects created manually via the Holst UI may read as palette names (e.g. fillColor.color "violet5") — decode via docs/palette.md in the repo. Holst renders saturated hues harmonized (hue kept, saturation/lights trimmed toward ~57–62% lightness) — identically for every input, so the color you set is the color the UI shows. Pale/dark/gray hexes render exactly.',
     fontFamilies: {
       verified: ['ShantellSans'],
       fromBundle: ['SourceCodePro (mono)', 'Inter', 'Roboto', 'Montserrat', 'MontserratAlternates', 'OpenSans', 'Arimo', 'Oswald', 'RobotoCondensed', 'EBGaramond', 'Merriweather', 'NotoSerif', 'TimesNewRoman', 'Bitter', 'Georgia', 'Caveat', 'Pacifico', 'Bangers', 'AbrilFatface', 'FredokaOne', 'Graduate', 'LemonTuesday', 'Comic'],
       note: 'tokens are PascalCase family names; mono = SourceCodePro, serif = EBGaramond/Merriweather/NotoSerif/TimesNewRoman',
     },
-    colorFormat: 'palette token (string) OR #RRGGBB hex — hex converts to the integer form Holst stores (e.g. #782baf → 7875503)',
+    colorFormat: '#RRGGBB hex only (palette names are NOT accepted since v0.6.0) — converts to the integer form Holst stores (e.g. #782baf → 7875503)',
     typography: {
       fontSize: 'px int on shape/arrow (field fontSize); simple-text converts px → textScale (base 14); sticker uses raw textScale',
-      textColor: 'text color field (token or hex); textBackgroundColor = highlight',
+      textColor: 'text color field (#RRGGBB); textBackgroundColor = highlight',
       textOpacity: '0..1 opacity inside textColor — pass WITH textColor (faded numerals: textColor + textOpacity 0.06-0.10)',
       runs: 'run-level styled text (alternative to plain text): [{ text, color?, bold?, italic?, underline?, strikethrough? }] — name+sublabel with different colors in ONE object; colors ride as Slate mark props via createFromJSON',
       emphasis: 'bold / italic / underline / strikethrough params → document marks (HTML <strong>/<em>/<u>/<s> through the native paste pipeline)',
@@ -50,6 +52,7 @@ export function getReference() {
       strokeWidth: 'line thickness 0..100 (UI examples: 2 thin, 5 medium, 17 fat)',
     },
     opacity: 'fillOpacity / strokeOpacity 0..1 in set_color (adjusts the opacity inside the color object, keeps the color); translucent washes e.g. fillOpacity 0.03',
+    backgroundStyles: { values: BACKGROUND_STYLES, note: 'frames only: fill (background without border), fill-border (both), border-only (outline, fill ignored); absent field = app default look' },
     zOrder: 'zIndex field; batch options.arrowsBehind: true places connectors BELOW the created nodes (design-system layering)',
     arrowLabels: {
       how: 'add_arrow / batch arrow entry: text + textPosition (0..1 along the path, default 0.5 middle); update later via holst_update_text on the arrow id',

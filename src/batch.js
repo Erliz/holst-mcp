@@ -2,7 +2,7 @@
 // shared validators, assigns refs, orders creations before arrows, and
 // resolves arrow ref-endpoints to creation indexes. Pure — no side effects.
 
-import { ValidationError, assertText, assertNoMarkdown, num, safeToken, assertStrokeStyle, assertOpacity, assertBorderRadius, assertRuns, assertShapeType, assertArrowType, assertObjectId, parseColor, assertArrowhead } from './validate.js';
+import { ValidationError, assertText, assertNoMarkdown, num, safeToken, assertStrokeStyle, assertOpacity, assertBorderRadius, assertRuns, assertShapeType, assertArrowType, assertObjectId, parseColor, assertArrowhead, assertBackgroundStyle } from './validate.js';
 import { buildStyleExtras, pxToTextScale } from './text-style.js';
 
 const KINDS = ['shape', 'sticker', 'simple-text', 'frame', 'stamp', 'arrow'];
@@ -74,8 +74,8 @@ function validateByKind(kind, e, i) {
       c.borderRadius = e.borderRadius === undefined ? undefined : assertBorderRadius(e.borderRadius, `objects[${i}].borderRadius`);
       const fillOp = e.fillOpacity === undefined ? undefined : assertOpacity(e.fillOpacity, `objects[${i}].fillOpacity`);
       const strokeOp = e.strokeOpacity === undefined ? undefined : assertOpacity(e.strokeOpacity, `objects[${i}].strokeOpacity`);
-      c.fillColor = { color: parseColor(e.fillColor, `objects[${i}].fillColor`, { default: 'white6' }), opacity: fillOp === undefined ? 1 : fillOp };
-      c.strokeColor = { color: parseColor(e.strokeColor, `objects[${i}].strokeColor`, { default: 'gray12' }), opacity: strokeOp === undefined ? 1 : strokeOp };
+      c.fillColor = { color: parseColor(e.fillColor, `objects[${i}].fillColor`, { default: '#ffffff' }), opacity: fillOp === undefined ? 1 : fillOp };
+      c.strokeColor = { color: parseColor(e.strokeColor, `objects[${i}].strokeColor`, { default: '#202020' }), opacity: strokeOp === undefined ? 1 : strokeOp };
       c.strokeWidth = num(e.strokeWidth, `objects[${i}].strokeWidth`, { default: 2, min: 0, max: 100 });
       c.fixedSize = e.fixedSize === undefined ? true : Boolean(e.fixedSize);
       Object.assign(c, marks, buildStyleExtras({
@@ -117,7 +117,8 @@ function validateByKind(kind, e, i) {
       c.labelText = assertText(e.labelText, `objects[${i}].labelText`, { default: 'Frame' });
       c.width = num(e.width, `objects[${i}].width`, { default: 800, ...SIZE });
       c.height = num(e.height, `objects[${i}].height`, { default: 600, ...SIZE });
-      c.fillColor = { color: parseColor(e.fillColor, `objects[${i}].fillColor`, { default: 'white3' }), opacity: 1 };
+      c.fillColor = { color: parseColor(e.fillColor, `objects[${i}].fillColor`, { default: '#ffffff' }), opacity: 1 };
+      c.backgroundStyle = assertBackgroundStyle(e.backgroundStyle, `objects[${i}].backgroundStyle`);
       c.hasDocument = false;
       return c;
     }
@@ -203,7 +204,7 @@ function validateArrowEntry(e, i) {
   return {
     ref: e.ref,
     arrowType: assertArrowType(e.arrowType, `objects[${i}].arrowType`, { default: 'elbow' }),
-    strokeColor: parseColor(e.strokeColor, `objects[${i}].strokeColor`, { default: 'gray10' }),
+    strokeColor: parseColor(e.strokeColor, `objects[${i}].strokeColor`, { default: '#808080' }),
     strokeStyle: assertStrokeStyle(e.strokeStyle, `objects[${i}].strokeStyle`, { default: 'solid' }),
     strokeWidth: e.strokeWidth === undefined ? undefined : num(e.strokeWidth, `objects[${i}].strokeWidth`, { min: 0, max: 100 }),
     zIndex: e.zIndex === undefined ? undefined : num(e.zIndex, `objects[${i}].zIndex`, { min: -1e7, max: 1e7 }),

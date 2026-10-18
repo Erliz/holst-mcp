@@ -20,7 +20,7 @@ describe('L2: batch creation mutates the fake yDoc', () => {
   test('shape with typography extras lands in fields', async () => {
     const state = await runExpr(buildBatchCreationExpr([{
       kind: 'shape', ref: 'a', x: 1, y: 2, width: 10, height: 20, shapeType: 'round-rect',
-      fillColor: { color: 0xbf4520, opacity: 0.08 }, strokeColor: { color: 'gray12', opacity: 1 },
+      fillColor: { color: 0xbf4520, opacity: 0.08 }, strokeColor: { color: 0x202020, opacity: 1 },
       strokeWidth: 2.2, fixedSize: true, borderRadius: 24, fontSize: 36,
       hasDocument: true, text: 'hi',
     }]));
@@ -36,9 +36,9 @@ describe('L2: batch creation mutates the fake yDoc', () => {
 describe('L2: arrowsBehind layering (quadrant regression)', () => {
   const makeDiagram = async (behind) => {
     const creations = [
-      { kind: 'frame', ref: 'f', x: 0, y: 0, width: 900, height: 500, labelText: 'z', fillColor: 'white3', hasDocument: false },
-      { kind: 'shape', ref: 'n1', x: 100, y: 100, width: 50, height: 50, shapeType: 'square', fillColor: { color: 'white6', opacity: 1 }, strokeColor: { color: 'gray12', opacity: 1 }, strokeWidth: 2, fixedSize: true, hasDocument: true, text: 'a' },
-      { kind: 'shape', ref: 'n2', x: 200, y: 200, width: 50, height: 50, shapeType: 'square', fillColor: { color: 'white6', opacity: 1 }, strokeColor: { color: 'gray12', opacity: 1 }, strokeWidth: 2, fixedSize: true, hasDocument: true, text: 'b' },
+      { kind: 'frame', ref: 'f', x: 0, y: 0, width: 900, height: 500, labelText: 'z', fillColor: { color: 0xffffff, opacity: 1 }, backgroundStyle: 2, hasDocument: false },
+      { kind: 'shape', ref: 'n1', x: 100, y: 100, width: 50, height: 50, shapeType: 'square', fillColor: { color: 0xffffff, opacity: 1 }, strokeColor: { color: 0x202020, opacity: 1 }, strokeWidth: 2, fixedSize: true, hasDocument: true, text: 'a' },
+      { kind: 'shape', ref: 'n2', x: 200, y: 200, width: 50, height: 50, shapeType: 'square', fillColor: { color: 0xffffff, opacity: 1 }, strokeColor: { color: 0x202020, opacity: 1 }, strokeWidth: 2, fixedSize: true, hasDocument: true, text: 'b' },
     ];
     let state = await runExpr(buildBatchCreationExpr(creations));
     const byIndex = state.byIndex();
@@ -99,7 +99,7 @@ describe('L2: native text write against fake singleDocumentStore', () => {
     const byIndex = state.byIndex();
     const segments = [
       { text: 'Orders ', color: 0xbf4520, marks: { bold: true } },
-      { text: 'API', color: 'gray12' },
+      { text: 'API', color: 0x202020 },
     ];
     const jobs = [{
       idx: 0,
@@ -119,12 +119,12 @@ describe('L2: read path + style fields', () => {
   test('arrow endpoint with existing objectId attaches to that object', async () => {
     let state = await runExpr(buildBatchCreationExpr([{
       kind: 'shape', ref: 'n', x: 0, y: 0, width: 10, height: 10, shapeType: 'square',
-      fillColor: { color: 'white6', opacity: 1 }, strokeColor: { color: 'gray12', opacity: 1 },
+      fillColor: { color: 0xffffff, opacity: 1 }, strokeColor: { color: 0x202020, opacity: 1 },
       strokeWidth: 1, fixedSize: true, hasDocument: true, text: '',
     }]));
     const targetId = state.byIndex()[0].id;
     state = await runExpr(buildBatchArrowsExpr([], [{
-      arrowType: 'straight', strokeColor: 'gray10', strokeStyle: 'solid',
+      arrowType: 'straight', strokeColor: 0x808080, strokeStyle: 'solid',
       from: { objectId: targetId, relativePoint: { x: 1, y: 0.5 } }, to: { point: { x: 50, y: 50 } },
     }], false), state);
     const arrow = state.objectsList().find((o) => o.fields.type === 'arrow');
@@ -135,10 +135,10 @@ describe('L2: read path + style fields', () => {
   test('explicit per-object zIndex wins over computed z', async () => {
     const state = await runExpr(buildBatchCreationExpr([
       { kind: 'shape', ref: 'wash', x: 0, y: 0, width: 10, height: 10, shapeType: 'square', zIndex: -900,
-        fillColor: { color: 0xbf4520, opacity: 0.04 }, strokeColor: { color: 'gray12', opacity: 1 },
+        fillColor: { color: 0xbf4520, opacity: 0.04 }, strokeColor: { color: 0x202020, opacity: 1 },
         strokeWidth: 0, fixedSize: true, hasDocument: true, text: '' },
       { kind: 'shape', ref: 'top', x: 0, y: 0, width: 5, height: 5, shapeType: 'square',
-        fillColor: { color: 'white6', opacity: 1 }, strokeColor: { color: 'gray12', opacity: 1 },
+        fillColor: { color: 0xffffff, opacity: 1 }, strokeColor: { color: 0x202020, opacity: 1 },
         strokeWidth: 1, fixedSize: true, hasDocument: true, text: '' },
     ]));
     const z = Object.fromEntries(state.objectsList().map((o) => [o.fields.type + (o.fields.zIndex < 0 ? '-low' : ''), o.fields.zIndex]));
@@ -182,7 +182,7 @@ describe('L2: read path + style fields (original)', () => {
   test('styleFields sets extras + touches updated', async () => {
     let state = await runExpr(buildBatchCreationExpr([{
       kind: 'shape', ref: 's', x: 0, y: 0, width: 1, height: 1, shapeType: 'square',
-      fillColor: { color: 'white6', opacity: 1 }, strokeColor: { color: 'gray12', opacity: 1 },
+      fillColor: { color: 0xffffff, opacity: 1 }, strokeColor: { color: 0x202020, opacity: 1 },
       strokeWidth: 1, fixedSize: true, hasDocument: true, text: '',
     }]));
     const id = state.byIndex()[0].id;
@@ -195,7 +195,7 @@ describe('L2: read path + style fields (original)', () => {
   test('kindExpr reads the object type', async () => {
     const state = await runExpr(buildBatchCreationExpr([{
       kind: 'shape', ref: 's', x: 0, y: 0, width: 1, height: 1, shapeType: 'square',
-      fillColor: { color: 'white6', opacity: 1 }, strokeColor: { color: 'gray12', opacity: 1 },
+      fillColor: { color: 0xffffff, opacity: 1 }, strokeColor: { color: 0x202020, opacity: 1 },
       strokeWidth: 1, fixedSize: true, hasDocument: true, text: '',
     }]));
     const id = state.byIndex()[0].id;

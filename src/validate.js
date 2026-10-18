@@ -10,7 +10,7 @@ export class ValidationError extends Error {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const OBJECT_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
-// Palette names / type tokens: letters, digits, dashes (yellow6, round-rect, textStamp).
+// Type tokens (shapeType, arrowType, stampType): letters, digits, dashes (round-rect, textStamp).
 const TOKEN_RE = /^[A-Za-z][A-Za-z0-9-]{0,31}$/;
 
 function fail(message) {
@@ -57,7 +57,8 @@ export function num(value, name, opts = {}) {
 }
 
 /**
- * Palette/type token (fillColor, shapeType, arrowType, stampType).
+ * Type token (shapeType, arrowType, stampType). Colors do NOT route here —
+ * they go through parseColor (#RRGGBB only since v0.6.0).
  * Charset whitelist keeps interpolated values inside a JS string literal.
  */
 export function safeToken(value, name, opts = {}) {
@@ -109,9 +110,11 @@ export function assertStrokeStyle(value, name, opts = {}) {
 }
 
 /**
- * Color value: a palette token (gray12, sky10…) OR a #RRGGBB hex string.
- * Tokens pass through as strings; hex converts to the integer form the app
- * stores (verified: UI '#782baf' → {color: 7875503}).
+ * Color value: #RRGGBB hex ONLY (v0.6.0). Hex converts to the integer form
+ * the app stores (verified: UI '#782baf' → {color: 7875503}). Internal
+ * palette token names are no longer accepted — tokens and their hex values
+ * render identically (verified pixel-wise), the full map lives in
+ * docs/palette.md; UI-created objects may still READ back as tokens.
  */
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
@@ -121,12 +124,27 @@ export function parseColor(value, name, opts = {}) {
     if (def === undefined) fail(`${name} is required`);
     value = def;
   }
-  if (typeof value !== 'string') {
-    fail(`${name} must be a palette token or #RRGGBB hex, got: ${typeof value}`);
+  if (typeof value !== 'string' || !HEX_RE.test(value)) {
+    fail(`${name} must be #RRGGBB hex (e.g. #e54d2e; palette names are not accepted — see holst_reference for suggested colors), got: ${typeof value === 'string' ? JSON.stringify(value.slice(0, 64)) : typeof value}`);
   }
-  if (HEX_RE.test(value)) return parseInt(value.slice(1), 16);
-  if (TOKEN_RE.test(value)) return value;
-  fail(`${name} must be a palette token (letters/digits/dash) or #RRGGBB hex, got: ${JSON.stringify(value.slice(0, 64))}`);
+  return parseInt(value.slice(1), 16);
+}
+
+/**
+ * Frame background style (decoded from UI samples 2026-10-18):
+ * 1 = fill without border, 2 = fill with border, 3 = border without fill.
+ * Absent field = app default look.
+ */
+const BACKGROUND_STYLES = ['fill', 'fill-border', 'border-only'];
+const BACKGROUND_STYLE_IDS = { fill: 1, 'fill-border': 2, 'border-only': 3 };
+export { BACKGROUND_STYLES };
+
+export function assertBackgroundStyle(value, name) {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || !BACKGROUND_STYLES.includes(value)) {
+    fail(`${name} must be one of ${BACKGROUND_STYLES.join(', ')} (frames only), got: ${typeof value === 'string' ? JSON.stringify(value.slice(0, 64)) : typeof value}`);
+  }
+  return BACKGROUND_STYLE_IDS[value];
 }
 
 /**
@@ -189,7 +207,7 @@ export function assertNoMarkdown(text) {
 /**
  * Run-level styled text: [{ text, color?, bold?, italic?, underline?,
  * strikethrough? }]. Returns segments [{ text, color? (token|int),
- * marks? {bold…} }] for the HTML paste pipeline.
+ * marks? {bold…} }] for the HTML paste pipeline (color is an int).
  */
 export function assertRuns(runs, name) {
   if (!Array.isArray(runs) || runs.length === 0) {
@@ -202,9 +220,17 @@ export function assertRuns(runs, name) {
     const text = assertNoMarkdown(assertText(r.text, `${name}[${i}].text`));
     const out = { text };
     // Idempotent: batch.js pre-normalizes runs, buildSegments validates again —
-    // an already-converted int color passes through untouched.
+    // an already-converted int color passes through untouched (range-gated:
+    // callers must not smuggle arbitrary ints past the hex-only contract).
     if (r.color !== undefined) {
-      out.color = typeof r.color === 'number' ? r.color : parseColor(r.color, `${name}[${i}].color`);
+      if (typeof r.color === 'number') {
+        if (!Number.isInteger(r.color) || r.color < 0 || r.color > 0xffffff) {
+          fail(`${name}[${i}].color must be #RRGGBB hex, got: ${r.color}`);
+        }
+        out.color = r.color;
+      } else {
+        out.color = parseColor(r.color, `${name}[${i}].color`);
+      }
     }
     const marks = {};
     for (const k of ['bold', 'italic', 'underline', 'strikethrough']) {

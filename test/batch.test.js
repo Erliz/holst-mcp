@@ -169,11 +169,11 @@ describe('buildBatchPlan: arrows', () => {
 
   test('shape: fontSize, textColor, bold, italic, horizontalAlign pass through', () => {
     const plan = buildBatchPlan([
-      { ...base, fontSize: 36, textColor: 'red10', bold: true, italic: true, horizontalAlign: 'center' },
+      { ...base, fontSize: 36, textColor: '#e54d2e', bold: true, italic: true, horizontalAlign: 'center' },
     ]);
     const c = plan.creations[0];
     assert.equal(c.fontSize, 36);
-    assert.deepEqual(c.textColor, { color: 'red10', opacity: 1 });
+    assert.deepEqual(c.textColor, { color: 0xe54d2e, opacity: 1 });
     assert.equal(c.bold, true);
     assert.equal(c.italic, true);
     assert.equal(c.horizontalAlign, 'center');
@@ -226,10 +226,18 @@ describe('buildBatchPlan: arrows', () => {
     assert.equal(plan.arrows[0].strokeColor, 0x2e5aa8);
   });
 
-  test('palette tokens still pass through batch colors', () => {
-    const plan = buildBatchPlan([{ ...base, fillColor: 'tomato8', strokeColor: 'gray12' }]);
-    assert.deepEqual(plan.creations[0].fillColor, { color: 'tomato8', opacity: 1 });
-    assert.deepEqual(plan.creations[0].strokeColor, { color: 'gray12', opacity: 1 });
+  test('palette names are rejected in batch colors (v0.6.0)', () => {
+    assert.throws(() => buildBatchPlan([{ ...base, fillColor: 'tomato8' }]), /#RRGGBB/);
+    assert.throws(() => buildBatchPlan([{ ...base, strokeColor: 'gray12' }]), ValidationError);
+  });
+
+  test('defaults are hex-derived ints; frame backgroundStyle maps to enum id', () => {
+    const plan = buildBatchPlan([{ ...base }]);
+    assert.deepEqual(plan.creations[0].fillColor, { color: 0xffffff, opacity: 1 });
+    assert.deepEqual(plan.creations[0].strokeColor, { color: 0x202020, opacity: 1 });
+    const frame = buildBatchPlan([{ kind: 'frame', ref: 'f', x: 0, y: 0, backgroundStyle: 'border-only' }]);
+    assert.equal(frame.creations[0].backgroundStyle, 3);
+    assert.throws(() => buildBatchPlan([{ kind: 'frame', ref: 'f', x: 0, y: 0, backgroundStyle: 'borders' }]), ValidationError);
   });
 
   test('batch textOpacity requires textColor', () => {

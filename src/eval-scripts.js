@@ -248,7 +248,7 @@ export function buildBatchCreationExpr(chunk) {
           docId = mkId();
           fields = { type: 'simple-text', position: pos, ...(s.width !== undefined ? { width: s.width, fixedWidth: true } : {}), documentId: docId, zIndex: s.zIndex !== undefined ? s.zIndex : maxZ + 1, created: { a: 0, t: Date.now() }, updated: null, id: newId, parentId: null };
         } else if (s.kind === 'frame') {
-          fields = { type: 'frame', width: s.width, height: s.height, labelText: s.labelText, fillColor: { color: s.fillColor }, position: pos, zIndex: s.zIndex !== undefined ? s.zIndex : minZ - 1, created: { a: 0, t: Date.now() }, updated: null, id: newId, parentId: null };
+          fields = { type: 'frame', width: s.width, height: s.height, labelText: s.labelText, fillColor: s.fillColor, ...(s.backgroundStyle !== undefined ? { backgroundStyle: s.backgroundStyle } : {}), position: pos, zIndex: s.zIndex !== undefined ? s.zIndex : minZ - 1, created: { a: 0, t: Date.now() }, updated: null, id: newId, parentId: null };
         } else if (s.kind === 'stamp') {
           fields = { type: 'stamp', data: { type: s.stampType, text: s.text }, width: s.width, height: s.height, position: pos, zIndex: s.zIndex !== undefined ? s.zIndex : maxZ + 1, created: { a: 0, t: Date.now() }, updated: null, id: newId, parentId: null };
         } else {

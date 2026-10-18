@@ -25,8 +25,9 @@ Everything below is operational knowledge you need — no external files require
 ## Conventions
 - Coordinates: top-left origin, y grows downward. Boxes 260×56 with ≥180px vertical
   gaps read well; x 300–1800 / y 80–1600 fits one screen.
-- Colors: palette names only — yellow6, blue6, green6, red6, orange8, gray10, gray12,
-  white3, white6. Call \`holst_reference\` for the full list.
+- Colors: #RRGGBB hex only (palette names are not accepted). Suggested set —
+  ink #202020, muted #8d8d8d, washes #e4defc/#cee7fe/#c6ecdb/#fff8c6, accents #e54d2e/#6e56cf/#05a2c2/#ffc53d.
+  Call \`holst_reference\` for the full list.
 - Arrows attach to objects: \`{ objectId, relativePoint: { x, y } }\`, relativePoint in 0..1
   of the object bounds (0.5/0.5 = center, 0.5/1 = bottom edge center).
 - Arrow labels: pass \`text\` (+ optional \`textPosition\` 0..1) to \`holst_add_arrow\` or a batch
@@ -36,7 +37,7 @@ Everything below is operational knowledge you need — no external files require
   \`arrowheadEnd: "none"\`. \`strokeWidth\` sets line thickness.
 - Run-level colors: \`runs: [{ text, color, bold }…]\` — several colors/emphasis inside ONE text
   (capsule shapes: \`shapeType: "round-rect"\` + \`borderRadius\` = height/2).
-- Typography: \`fontSize\` (px), \`textColor\`/\`textBackgroundColor\` (palette token or #RRGGBB),
+- Typography: \`fontSize\` (px), \`textColor\`/\`textBackgroundColor\` (#RRGGBB),
   \`horizontalAlign\`, \`bold\`/\`italic\`/\`underline\`/\`strikethrough\` on text objects.
   Markdown (**/*/_) is NOT rendered — it is rejected; use the style params.
 - Translucency: \`holst_set_color\` \`fillOpacity\`/\`strokeOpacity\` 0..1 (zones/washes).

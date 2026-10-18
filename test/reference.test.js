@@ -5,10 +5,12 @@ import { getReference } from '../src/reference.js';
 describe('getReference', () => {
   const ref = getReference();
 
-  test('exposes palette with verified colors', () => {
-    for (const c of ['yellow6', 'blue6', 'green6', 'red6', 'orange8', 'gray10', 'gray12', 'white3', 'white6']) {
-      assert.ok(ref.paletteColors.includes(c), c);
-    }
+  test('suggests hex colors; palette names are gone from the interface', () => {
+    assert.ok(ref.suggestedColors.ink === '#202020');
+    assert.ok(ref.suggestedColors.accents.red === '#e54d2e');
+    assert.ok(/#RRGGBB hex only/.test(ref.colorFormat));
+    assert.ok(!('paletteColors' in ref));
+    assert.deepEqual(ref.backgroundStyles.values, ['fill', 'fill-border', 'border-only']);
   });
 
   test('exposes verified shape and arrow types', () => {

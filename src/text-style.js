@@ -48,7 +48,7 @@ export function segmentsToHtml(segments) {
 /**
  * Render segments to Slate editor nodes for the createFromJSON write path
  * (run-level colors do NOT survive the HTML paste pipeline — the app strips
- * them; colors are mark props on text nodes: {text, color: 'red10', bold}).
+ * them; colors are mark props on text nodes: {text, color: 0xe54d2e, bold}).
  */
 export function segmentsToSlateNodes(segments, uuid) {
   const lines = [[]];

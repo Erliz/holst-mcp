@@ -5,6 +5,49 @@
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-10-19
+
+Breaking: цветовой API переведён на `#RRGGBB`-only. Имена палитры (gray12, violet5…)
+убраны из всех параметров и описаний — эмпирически доказано (попиксельные замеры
+рендера), что токен и его hex-значение рендерятся идентично, имена лишь добавляли
+276 лишних сущностей в контекст агентов. Полная карта токен→hex сохранена в
+`docs/palette.md` (источник: бандл приложения, light theme) — она нужна для
+расшифровки объектов, созданных вручную через UI Holst (там yDoc хранит имена).
+
+### Изменено (breaking)
+- `parseColor`: принимается только `#RRGGBB`; имя палитры → понятная ошибка
+  с подсказкой на `holst_reference`. Затрагивает fillColor/strokeColor/textColor/
+  textBackgroundColor/runs[].color во всех add_*, batch, set_color, update_text
+- Дефолты инструментов переведены на hex-эквиваленты: `#ffffff` (было white3/white6),
+  `#202020` (gray12), `#808080` (gray10)
+- `holst_reference`: секция палитры заменена на компактный набор рекомендованных
+  hex-цветов + `colorRendering` (нюанс рендера, см. ниже)
+- `get_board_content` по-прежнему возвращает сырые значения: объекты из UI могут
+  читаться как `{ color: "violet5" }` — расшифровка в `docs/palette.md`
+
+### Добавлено
+- Нормализация цветов при чтении: `get_board_content` возвращает MCP-записанные int-цвета
+  тем же `#RRGGBB`, который передавался (модуль `src/dump-colors.js`); имена токенов из UI
+  проходят as-is (расшифровка — `docs/palette.md`)
+- `backgroundStyle` для фреймов: `fill` / `fill-border` / `border-only`
+  (декодировано из UI-образцов; маппинг на внутренние 1/2/3) — в `holst_add_frame`,
+  `holst_set_color` и batch kind `frame`; отсутствие поля = прежний вид
+- `docs/palette.md`: полная карта 23 семей × 12 = 276 токен → hex с примечанием
+  о рендер-гармонизации
+
+### Исправлено
+- Batch-фреймы двойную вкладывали fillColor (`{color: {color…}}`) — латентный баг
+  с токенами-дефолтами, стал виден при переходе на int; теперь плоская запись
+
+### Документировано (поведение, а не изменения)
+- Старая аппроксимация из справочника v0.5 («tomato8 ≈ #ca4b31») была ошибочной —
+  это значение базовой (тёмной) рампы бандла; на доске (light theme) tomato8 = `#ea9280`
+- **Рендер-гармонизация**: Holst рисует насыщенные цвета приглушённее (тон ±5°,
+  насыщенность ниже, светлота к ~57–62%) — единый детерминированный трансформ для
+  токенов И hex (`#e54d2e → #d4583b`, `#6e56cf → #6a57c8`); бледные/тёмные/серые
+  проходят дословно. Хранение всегда вербатим; чтение возвращает исходный hex
+  (MCP-цвета — после нормализации, см. выше).
+
 ## [0.5.0] — 2026-10-18
 
 Крупный релиз: типографика и визуальная точность, батч-контракты, инженерная
@@ -104,7 +147,8 @@ Security hardening, нативный Slate-конвейер, self-sufficient MCP
   `holst_set_color`, `holst_delete_object`
 - `bin/start-holst.sh` — запуск Holst.app с дебаг-портом (quarantine-снятие, рестарты)
 
-[Unreleased]: https://github.com/Erliz/holst-mcp/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/Erliz/holst-mcp/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/Erliz/holst-mcp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Erliz/holst-mcp/compare/v0.3.0...v0.5.0
 [0.3.0]: https://github.com/Erliz/holst-mcp/compare/v0.1.0...v0.3.0
 [0.1.0]: https://github.com/atomachinskiy/holst-mcp/commit/d0d649b

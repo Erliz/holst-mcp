@@ -108,8 +108,7 @@ describe('num', () => {
 });
 
 describe('safeToken', () => {
-  test('accepts palette names and shape types', () => {
-    assert.equal(safeToken('yellow6', 'fillColor'), 'yellow6');
+  test('accepts shape/arrow/stamp tokens (NOT colors since v0.6.0)', () => {
     assert.equal(safeToken('round-rect', 'shapeType'), 'round-rect');
     assert.equal(safeToken('elbow', 'arrowType'), 'elbow');
     assert.equal(safeToken('textStamp', 'stampType'), 'textStamp');
@@ -174,10 +173,10 @@ describe('assertStrokeStyle', () => {
   });
 });
 
-describe('parseColor (palette token or #RRGGBB)', () => {
-  test('palette token passes through as string', () => {
-    assert.equal(parseColor('gray12', 'fillColor'), 'gray12');
-    assert.equal(parseColor('sky10', 'textColor'), 'sky10');
+describe('parseColor (#RRGGBB only since v0.6.0)', () => {
+  test('palette names are rejected with a hint', () => {
+    assert.throws(() => parseColor('gray12', 'fillColor'), /#RRGGBB/);
+    assert.throws(() => parseColor('sky10', 'textColor'), ValidationError);
   });
 
   test('hex converts to int', () => {
@@ -262,12 +261,19 @@ describe('assertRuns (run-level styled text)', () => {
   test('valid runs pass and normalize', () => {
     const runs = assertRuns([
       { text: 'Name', color: '#bf4520', bold: true },
-      { text: 'Sublabel', color: 'gray12', italic: true },
+      { text: 'Sublabel', color: '#202020', italic: true },
     ], 'runs');
     assert.deepEqual(runs, [
       { text: 'Name', color: 0xbf4520, marks: { bold: true } },
-      { text: 'Sublabel', color: 'gray12', marks: { italic: true } },
+      { text: 'Sublabel', color: 0x202020, marks: { italic: true } },
     ]);
+  });
+
+  test('pre-normalized int colors pass, out-of-range ints rejected', () => {
+    assert.equal(assertRuns([{ text: 'x', color: 0xe54d2e }], 'runs')[0].color, 0xe54d2e);
+    assert.throws(() => assertRuns([{ text: 'x', color: -1 }], 'runs'), ValidationError);
+    assert.throws(() => assertRuns([{ text: 'x', color: 0x1000000 }], 'runs'), ValidationError);
+    assert.throws(() => assertRuns([{ text: 'x', color: 1.5 }], 'runs'), ValidationError);
   });
 
   test('run without style collapses to plain segment', () => {

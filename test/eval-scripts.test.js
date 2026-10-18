@@ -46,7 +46,7 @@ describe('L1: mount checks', () => {
 describe('L1: batch exprs', () => {
   const chunk = [{
     kind: 'shape', ref: 'a', x: 1, y: 2, width: 10, height: 20, shapeType: 'square',
-    fillColor: { color: 'white6', opacity: 1 }, strokeColor: { color: 'gray12', opacity: 1 },
+    fillColor: { color: 0xffffff, opacity: 1 }, strokeColor: { color: 0x202020, opacity: 1 },
     strokeWidth: 2, fixedSize: true, fontSize: 36, hasDocument: true, text: 'hi',
   }];
 

@@ -2,6 +2,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { openHolstSession, listTabs, isBoardUrl, isHolstUrl, getCdpJSON, acquirePooledSession, releaseSession } from './cdp.js';
+import { normalizeDumpColors } from './dump-colors.js';
 import { ensureCdp } from './autostart.js';
 import {
   ValidationError,
@@ -11,6 +12,7 @@ import {
   assertNoMarkdown,
   assertArrowEndpoint,
   assertStrokeStyle,
+  assertBackgroundStyle,
   assertArrowhead,
   assertShapeType,
   assertArrowType,
@@ -266,6 +268,9 @@ export async function getBoardContent(boardId, opts = {}) {
     );
     if (yjson?.__error) throw new Error(yjson.__error);
     let content = limitDump(yjson);
+    // MCP-written ints read back as the same hex the caller sent (#RRGGBB).
+    // UI-written palette names pass through (map: docs/palette.md).
+    normalizeDumpColors(content);
     // Response shaping — saves LLM tokens; the CDP dump stays complete.
     if (bbox || positionsOnly) {
       const inBbox = (o) => {
@@ -718,8 +723,8 @@ export async function addShape(boardId, {
   width = 240,
   height = 48,
   shapeType = 'square',
-  fillColor = 'white6',
-  strokeColor = 'gray12',
+  fillColor = '#ffffff',
+  strokeColor = '#202020',
   strokeWidth = 2,
   fixedSize = true,
   borderRadius,
@@ -746,8 +751,8 @@ export async function addShape(boardId, {
   width = num(width, 'width', SIZE);
   height = num(height, 'height', SIZE);
   shapeType = assertShapeType(shapeType, 'shapeType', { default: 'square' });
-  fillColor = fillColor === undefined ? 'white6' : parseColor(fillColor, 'fillColor');
-  strokeColor = strokeColor === undefined ? 'gray12' : parseColor(strokeColor, 'strokeColor');
+  fillColor = fillColor === undefined ? '#ffffff' : parseColor(fillColor, 'fillColor');
+  strokeColor = strokeColor === undefined ? '#202020' : parseColor(strokeColor, 'strokeColor');
   borderRadius = borderRadius === undefined ? undefined : assertBorderRadius(borderRadius, 'borderRadius');
   strokeWidth = num(strokeWidth, 'strokeWidth', { min: 0, max: 100 });
   const styleExtras = buildStyleExtras({ fontSize, textScale: undefined, textColor, textBackgroundColor, horizontalAlign, verticalAlign, letterSpacing, fontFamily, lineHeight });
@@ -875,7 +880,7 @@ export async function addArrow(boardId, {
   start,           // { x, y } | { objectId, relativePoint: {x, y} }
   end,
   arrowType = 'elbow',  // 'elbow' | 'straight' | 'curved'
-  strokeColor = 'gray10',
+  strokeColor = '#808080',
   strokeStyle = 'solid', // 'solid' | 'dashed' | 'dotted'
   strokeWidth,           // line thickness (UI examples: 5, 17)
   arrowheadStart,        // 'none' | 'miro' | 'arc' | 'figma' (undefined = app default: no start head)
@@ -883,7 +888,7 @@ export async function addArrow(boardId, {
   text,            // optional on-arrow label
   textPosition = 0.5,   // 0..1 along the arrow path
   fontSize,        // label font size
-  textColor,       // label color (palette token or #RRGGBB)
+  textColor,       // label color (#RRGGBB)
 }) {
   assertBoardId(boardId);
   assertBoardWritable(boardId);
@@ -891,7 +896,7 @@ export async function addArrow(boardId, {
   assertArrowEndpoint(start, 'start');
   assertArrowEndpoint(end, 'end');
   arrowType = assertArrowType(arrowType, 'arrowType', { default: 'elbow' });
-  strokeColor = parseColor(strokeColor, 'strokeColor', { default: 'gray10' });
+  strokeColor = parseColor(strokeColor, 'strokeColor', { default: '#808080' });
   strokeStyle = assertStrokeStyle(strokeStyle, 'strokeStyle', { default: 'solid' });
   strokeWidth = strokeWidth === undefined ? undefined : num(strokeWidth, 'strokeWidth', { min: 0, max: 100 });
   arrowheadStart = assertArrowhead(arrowheadStart, 'arrowheadStart');
@@ -1002,11 +1007,11 @@ export async function moveObject(boardId, objectId, { x, y }) {
 }
 
 /**
- * Set fill / stroke color (palette token or #RRGGBB), stroke style and stroke
+ * Set fill / stroke color (#RRGGBB), stroke style and stroke
  * width on an object. fillOpacity / strokeOpacity (0..1) adjust the opacity
  * inside the existing color object without touching its color.
  */
-export async function setColor(boardId, objectId, { fillColor, strokeColor, strokeStyle, strokeWidth, fillOpacity, strokeOpacity } = {}) {
+export async function setColor(boardId, objectId, { fillColor, strokeColor, strokeStyle, strokeWidth, fillOpacity, strokeOpacity, backgroundStyle } = {}) {
   assertBoardId(boardId);
   assertBoardWritable(boardId);
   assertNotReadOnly();
@@ -1017,9 +1022,11 @@ export async function setColor(boardId, objectId, { fillColor, strokeColor, stro
   strokeWidth = strokeWidth === undefined ? undefined : num(strokeWidth, 'strokeWidth', { min: 0, max: 100 });
   fillOpacity = fillOpacity === undefined ? undefined : assertOpacity(fillOpacity, 'fillOpacity');
   strokeOpacity = strokeOpacity === undefined ? undefined : assertOpacity(strokeOpacity, 'strokeOpacity');
+  backgroundStyle = assertBackgroundStyle(backgroundStyle, 'backgroundStyle');
   if (fillColor === undefined && strokeColor === undefined && strokeStyle === undefined
-      && strokeWidth === undefined && fillOpacity === undefined && strokeOpacity === undefined) {
-    throw new ValidationError('provide at least one of fillColor, strokeColor, strokeStyle, strokeWidth, fillOpacity, strokeOpacity');
+      && strokeWidth === undefined && fillOpacity === undefined && strokeOpacity === undefined
+      && backgroundStyle === undefined) {
+    throw new ValidationError('provide at least one of fillColor, strokeColor, strokeStyle, strokeWidth, fillOpacity, strokeOpacity, backgroundStyle');
   }
   const session = await getBoardSession(boardId);
   try {
@@ -1045,6 +1052,7 @@ export async function setColor(boardId, objectId, { fillColor, strokeColor, stro
             ${strokeStyle ? (strokeStyle === 'solid'
               ? `if (obj.get('strokeStyle') !== undefined) obj.delete('strokeStyle');`
               : `obj.set('strokeStyle', ${JSON.stringify(strokeStyle)});`) : ''}
+            ${backgroundStyle !== undefined ? `if (obj.get('type') !== 'frame') { warn.push('backgroundStyle applies to frames only'); } else { obj.set('backgroundStyle', ${Number(backgroundStyle)}); }` : ''}
             obj.set('updated', { a: 0, t: Date.now() });
           });
           return { ok: true, id: ${JSON.stringify(objectId)}, warnings: warn.length ? warn : null };
@@ -1068,7 +1076,8 @@ export async function addFrame(boardId, {
   y,
   width = 800,
   height = 600,
-  fillColor = 'white3',
+  fillColor = '#ffffff',
+  backgroundStyle,
 }) {
   assertBoardId(boardId);
   assertBoardWritable(boardId);
@@ -1078,7 +1087,8 @@ export async function addFrame(boardId, {
   y = num(y, 'y', COORD);
   width = num(width, 'width', SIZE);
   height = num(height, 'height', SIZE);
-  fillColor = fillColor === undefined ? 'white3' : parseColor(fillColor, 'fillColor');
+  fillColor = fillColor === undefined ? '#ffffff' : parseColor(fillColor, 'fillColor');
+  backgroundStyle = assertBackgroundStyle(backgroundStyle, 'backgroundStyle');
   const session = await getBoardSession(boardId);
   try {
     const result = await session.evaluate(
@@ -1100,7 +1110,8 @@ export async function addFrame(boardId, {
             width: ${Number(width)},
             height: ${Number(height)},
             labelText: ${JSON.stringify(labelText)},
-            fillColor: { color: ${JSON.stringify(fillColor)} },
+            fillColor: { color: ${JSON.stringify(fillColor)}, opacity: 1 },${backgroundStyle !== undefined ? `
+            backgroundStyle: ${Number(backgroundStyle)},` : ''}
             position: { x: ${Number(x)}, y: ${Number(y)} },
             zIndex: minZ - 1,
             created: { a: 0, t: Date.now() },

@@ -36,9 +36,9 @@ const TEXT_STYLE_PROPS = {
   ...RUNS_PROP,
   fontSize: { type: 'number', description: 'Font size in px (shape) — for simple-text converts to internal scale' },
   textScale: { type: 'number', description: 'Raw font scale multiplier (sticker/simple-text alternative to fontSize)' },
-  textColor: { type: 'string', description: 'Text color: palette token (gray12, sky10, tomato8…) or #RRGGBB' },
+  textColor: { type: 'string', description: 'Text color: #RRGGBB (e.g. #202020 ink, #e54d2e vivid red)' },
   textOpacity: { type: 'number', description: 'Text opacity 0..1 — requires textColor; big faded numerals: textColor #bf4520 + textOpacity 0.06' },
-  textBackgroundColor: { type: 'string', description: 'Text highlight color: palette token or #RRGGBB' },
+  textBackgroundColor: { type: 'string', description: 'Text highlight color: #RRGGBB' },
   horizontalAlign: { type: 'string', description: 'left (default), center, right, justify' },
   verticalAlign: { type: 'string', description: 'top, center, bottom (text position inside shape)' },
   letterSpacing: { type: 'number', description: 'Letter spacing in px (float, -10..100)' },
@@ -66,7 +66,7 @@ export const TOOLS = [
   {
     name: 'holst_reference',
     description:
-      'On-demand reference: palette colors, verified shape/arrow types, coordinate conventions, timings, result-field semantics, limits, env vars, do-not list. Cheaper than guessing.',
+      'On-demand reference: suggested hex colors, verified shape/arrow types, coordinate conventions, timings, result-field semantics, limits, env vars, do-not list. Cheaper than guessing.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
@@ -129,7 +129,7 @@ export const TOOLS = [
       'options.arrowsBehind: true places arrows BELOW the nodes (design-system layering). ' +
       'ref is a local name (letters/digits/dash/_); arrows link refs instead of UUIDs; refs auto-generate when omitted. ' +
       'Result maps each ref to { id, documentId, mounted, textOk } — verify with holst_get_board_summary afterwards. ' +
-      'Same fields/validation as the individual add_* tools; palette colors or #RRGGBB, top-left coords, batch limit 200.',
+      'Same fields/validation as the individual add_* tools; colors are #RRGGBB hex; frames accept backgroundStyle (fill / fill-border / border-only); top-left coords, batch limit 200.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -245,8 +245,8 @@ export const TOOLS = [
         height: { type: 'number', default: 48 },
         shapeType: { type: 'string', default: 'square', description: SHAPE_TYPES_DESC },
         borderRadius: { type: 'number', description: 'Corner rounding px — borderRadius = height/2 gives a capsule/pill' },
-        fillColor: { type: 'string', default: 'white6', description: 'Palette name or #RRGGBB' },
-        strokeColor: { type: 'string', default: 'gray12', description: 'Palette name or #RRGGBB' },
+        fillColor: { type: 'string', default: '#ffffff', description: '#RRGGBB hex' },
+        strokeColor: { type: 'string', default: '#202020', description: '#RRGGBB hex' },
         strokeWidth: { type: 'number', default: 2 },
         fixedSize: { type: 'boolean', default: true },
         ...TEXT_STYLE_PROPS,
@@ -279,7 +279,7 @@ export const TOOLS = [
       'Connect two points or objects. Endpoint = { x, y } for a free point, or { objectId, relativePoint: { x, y } } to attach (0..1 of object bounds; 0.5/1 = bottom center). Create endpoint objects FIRST — you need their ids. ' +
       'Optional text = on-arrow label; textPosition 0..1 places it along the path (default middle). ' +
       'arrowheadStart/arrowheadEnd: none | miro | arc | figma (absent = default: no start head, standard end head; "none" disables). ' +
-      'strokeStyle: solid (default), dashed, dotted. strokeWidth: line thickness. fontSize/textColor style the label; colors accept palette tokens or #RRGGBB.',
+      'strokeStyle: solid (default), dashed, dotted. strokeWidth: line thickness. fontSize/textColor style the label; colors are #RRGGBB hex.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -293,7 +293,7 @@ export const TOOLS = [
           description: '{ x, y } or { objectId, relativePoint: {x, y} }',
         },
         arrowType: { type: 'string', default: 'elbow', description: 'elbow, straight, curved' },
-        strokeColor: { type: 'string', default: 'gray10', description: 'Palette token or #RRGGBB' },
+        strokeColor: { type: 'string', default: '#808080', description: '#RRGGBB hex' },
         strokeStyle: { type: 'string', default: 'solid', description: STROKE_STYLES_DESC },
         strokeWidth: { type: 'number', description: 'Line thickness (e.g. 2 thin, 5 medium, 17 fat)' },
         arrowheadStart: { type: 'string', description: 'none, miro, arc, figma' },
@@ -301,7 +301,7 @@ export const TOOLS = [
         text: { type: 'string', description: 'On-arrow label (\\n = new line)' },
         textPosition: { type: 'number', default: 0.5, description: 'Label position along the arrow, 0..1 (0.5 = middle)' },
         fontSize: { type: 'number', description: 'Label font size in px' },
-        textColor: { type: 'string', description: 'Label color: palette token or #RRGGBB' },
+        textColor: { type: 'string', description: 'Label color: #RRGGBB' },
       },
       required: ['boardId', 'start', 'end'],
       additionalProperties: false,
@@ -340,7 +340,7 @@ export const TOOLS = [
   {
     name: 'holst_add_frame',
     description:
-      'Add a large labeled container that sits BELOW content (groups a diagram). labelText is a plain field, no separate document. ' + ADD_NOTE,
+      'Add a large labeled container that sits BELOW content (groups a diagram). labelText is a plain field, no separate document. backgroundStyle: fill / fill-border / border-only. ' + ADD_NOTE,
     inputSchema: {
       type: 'object',
       properties: {
@@ -350,7 +350,8 @@ export const TOOLS = [
         y: { type: 'number' },
         width: { type: 'number', default: 800 },
         height: { type: 'number', default: 600 },
-        fillColor: { type: 'string', default: 'white3' },
+        fillColor: { type: 'string', default: '#ffffff', description: '#RRGGBB hex' },
+        backgroundStyle: { type: 'string', enum: ['fill', 'fill-border', 'border-only'], description: 'Frame look: fill (no border), fill-border (default-ish both), border-only (no fill)' },
       },
       required: ['boardId', 'x', 'y'],
       additionalProperties: false,
@@ -378,18 +379,19 @@ export const TOOLS = [
   {
     name: 'holst_set_color',
     description:
-      'Set fillColor and/or strokeColor (palette tokens or #RRGGBB hex), strokeStyle (solid, dashed, dotted), strokeWidth, and/or fillOpacity / strokeOpacity (0..1 — translucent zones/washes). Full palette: holst_reference.',
+      'Set fillColor and/or strokeColor (#RRGGBB hex), strokeStyle (solid, dashed, dotted), strokeWidth, fillOpacity / strokeOpacity (0..1 — translucent washes), and backgroundStyle on frames. Suggested colors: holst_reference.',
     inputSchema: {
       type: 'object',
       properties: {
         boardId: { type: 'string' },
         objectId: { type: 'string' },
-        fillColor: { type: 'string', description: 'Palette token or #RRGGBB' },
-        strokeColor: { type: 'string', description: 'Palette token or #RRGGBB' },
+        fillColor: { type: 'string', description: '#RRGGBB hex' },
+        strokeColor: { type: 'string', description: '#RRGGBB hex' },
         strokeStyle: { type: 'string', description: 'solid, dashed, dotted' },
         strokeWidth: { type: 'number', description: 'Line thickness 0..100' },
         fillOpacity: { type: 'number', description: 'Fill opacity 0..1 (keeps current color)' },
         strokeOpacity: { type: 'number', description: 'Stroke opacity 0..1 (keeps current color)' },
+        backgroundStyle: { type: 'string', enum: ['fill', 'fill-border', 'border-only'], description: 'Frames only: fill / fill-border / border-only look' },
       },
       required: ['boardId', 'objectId'],
       additionalProperties: false,
