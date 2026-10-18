@@ -8,25 +8,67 @@ export { ValidationError };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/**
- * HOLST_ALLOWED_BOARD_IDS: comma/space-separated UUID allowlist.
- * Unset or blank → no restriction. Malformed entries are ignored.
- */
-export function allowedBoardIds() {
-  const raw = process.env.HOLST_ALLOWED_BOARD_IDS;
+function parseIdList(raw) {
   if (!raw || !raw.trim()) return null;
   const ids = raw
     .split(/[\s,]+/)
     .map((s) => s.trim().toLowerCase())
     .filter((s) => UUID_RE.test(s));
-  return ids.length ? new Set(ids) : null;
+  return ids.length ? ids : null;
 }
 
-export function assertBoardAllowed(boardId) {
-  const allowed = allowedBoardIds();
-  if (allowed && !allowed.has(String(boardId).toLowerCase())) {
+/**
+ * HOLST_RW_BOARD_IDS: comma/space-separated UUIDs with full access.
+ * Unset or blank → null (no restriction from this list).
+ */
+export function rwBoardIds() {
+  return parseIdList(process.env.HOLST_RW_BOARD_IDS);
+}
+
+/**
+ * HOLST_RO_BOARD_IDS: comma/space-separated UUIDs, read-only access.
+ * Unset or blank → null (no restriction from this list).
+ */
+export function roBoardIds() {
+  return parseIdList(process.env.HOLST_RO_BOARD_IDS);
+}
+
+/**
+ * Read access: when either list is configured, the board must appear in
+ * RW ∪ RO. Both unset → unrestricted.
+ */
+export function assertBoardReadable(boardId) {
+  const rw = rwBoardIds();
+  const ro = roBoardIds();
+  if (!rw && !ro) return;
+  const id = String(boardId).toLowerCase();
+  const allowed = (rw?.includes(id) || false) || (ro?.includes(id) || false);
+  if (!allowed) {
     throw new ValidationError(
-      `boardId ${boardId} is not in HOLST_ALLOWED_BOARD_IDS allowlist`
+      `boardId ${boardId} is not in HOLST_RW_BOARD_IDS or HOLST_RO_BOARD_IDS allowlists`
+    );
+  }
+}
+
+/**
+ * Write access: when either list is configured, the board must appear in
+ * RW and must NOT appear in RO (fail-closed: read-only wins on conflict).
+ * Both unset → unrestricted. The global HOLST_READ_ONLY switch is a
+ * separate, stronger check (assertNotReadOnly).
+ */
+export function assertBoardWritable(boardId) {
+  const rw = rwBoardIds();
+  const ro = roBoardIds();
+  if (!rw && !ro) return;
+  const id = String(boardId).toLowerCase();
+  if (ro?.includes(id)) {
+    throw new ValidationError(
+      `boardId ${boardId} is in HOLST_RO_BOARD_IDS (read-only): write operations are disabled for this board`
+    );
+  }
+  if (!(rw?.includes(id) || false)) {
+    throw new ValidationError(
+      `boardId ${boardId} is not in HOLST_RW_BOARD_IDS allowlist`
     );
   }
 }

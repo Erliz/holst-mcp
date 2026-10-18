@@ -1,0 +1,424 @@
+// Tool schemas + dispatch handlers (extracted from server.js so tests can
+// import them — server.js starts a stdio transport on import).
+// Invariant under test: every args.X a handler reads is declared in its
+// tool's inputSchema (test/tools-schema.test.js).
+
+import {
+  whoAmI, doctor, listBoards, batchCreate, getBoardContent, getBoardSummary,
+  searchBoardText, addSticker, updateText, deleteObject, deleteObjects,
+  addShape, addSimpleText, addArrow, moveObject, resizeObject, setColor,
+  addFrame, addStamp,
+} from './holst.js';
+import { getReference } from './reference.js';
+import { SHAPE_TYPES, STROKE_STYLES } from './validate.js';
+
+export // Descriptions GENERATED from validate.js enums — single source of truth.
+// Editing a token list in validate.js updates these automatically; the
+// tools-schema test asserts descriptions match the enum data.
+const SHAPE_TYPES_DESC = SHAPE_TYPES.join(', ') + ' (whitelist; \"rhombus\" does NOT exist — use diamond)';
+const STROKE_STYLES_DESC = STROKE_STYLES.filter((s) => s !== 'solid').join(', ') + ' (default solid)';
+
+const ADD_NOTE =
+  'NOTE: takes 3-8s (editor settle) — slow is normal, never retry on slowness. ' +
+  'Result: { ok, id, documentId, mounted, native }; mounted=false = not rendered yet (server self-heals via reload) — verify with holst_get_board_summary. ' +
+  'Coordinates: top-left origin, y grows down.';
+
+const RUNS_PROP = {
+  runs: {
+    type: 'array',
+    description: 'Run-level styled text (alternative to text): [{ text, color?, bold?, italic?, underline?, strikethrough? }] — e.g. name in coral bold + sublabel in gray italic inside ONE object',
+    items: { type: 'object' },
+  },
+};
+
+// Shared typography properties for text-bearing objects.
+const TEXT_STYLE_PROPS = {
+  ...RUNS_PROP,
+  fontSize: { type: 'number', description: 'Font size in px (shape) — for simple-text converts to internal scale' },
+  textScale: { type: 'number', description: 'Raw font scale multiplier (sticker/simple-text alternative to fontSize)' },
+  textColor: { type: 'string', description: 'Text color: palette token (gray12, sky10, tomato8…) or #RRGGBB' },
+  textOpacity: { type: 'number', description: 'Text opacity 0..1 — requires textColor; big faded numerals: textColor #bf4520 + textOpacity 0.06' },
+  textBackgroundColor: { type: 'string', description: 'Text highlight color: palette token or #RRGGBB' },
+  horizontalAlign: { type: 'string', description: 'left (default), center, right, justify' },
+  verticalAlign: { type: 'string', description: 'top, center, bottom (text position inside shape)' },
+  letterSpacing: { type: 'number', description: 'Letter spacing in px (float, -10..100)' },
+  fontFamily: { type: 'string', description: 'Font token: SourceCodePro (mono), Inter, Roboto, Montserrat, EBGaramond, Merriweather, TimesNewRoman, Caveat, ShantellSans…' },
+  lineHeight: { type: 'number', description: 'Line height in percent (e.g. 250 = 250%)' },
+  bold: { type: 'boolean', description: 'Bold the whole text' },
+  italic: { type: 'boolean', description: 'Italicize the whole text' },
+  underline: { type: 'boolean', description: 'Underline the whole text' },
+  strikethrough: { type: 'boolean', description: 'Strikethrough the whole text' },
+};
+
+export const TOOLS = [
+  {
+    name: 'holst_whoami',
+    description:
+      'Check the Holst connection: returns the logged-in user. Run this first if anything fails. Never auto-launches anything by itself.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'holst_doctor',
+    description:
+      'Full self-diagnosis: CDP endpoint, Holst app, tabs, auth, editor readiness, latency, effective config. Never throws — returns a report with a human-readable verdict and suggested action. Run this before troubleshooting anything.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'holst_reference',
+    description:
+      'On-demand reference: palette colors, verified shape/arrow types, coordinate conventions, timings, result-field semantics, limits, env vars, do-not list. Cheaper than guessing.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'holst_list_boards',
+    description:
+      'List all boards and folders across the user\'s workspaces. Returns the user, recent boards, and per-workspace trees. boardId for other tools is a strict UUID from here (or from a board URL).',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'holst_get_board_content',
+    description:
+      'Full raw dump of a board: all objects (with coordinates) + all document texts. Size-capped by HOLST_MAX_DUMP_BYTES (default 2MB) — for big boards use holst_search_text or holst_get_board_summary instead. ' +
+      'Token savers: bbox {x1,y1,x2,y2} returns only overlapping objects; positionsOnly:true returns compact {type,x,y,w,h} without texts.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        boardId: { type: 'string', description: 'UUID board id' },
+        bbox: { type: 'object', description: '{ x1, y1, x2, y2 } board coords — only overlapping objects returned' },
+        positionsOnly: { type: 'boolean', description: 'Compact {type,x,y,w,h} per object, no document texts' },
+      },
+      required: ['boardId'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'holst_get_board_summary',
+    description:
+      'Structured markdown of a board: stickers grouped under nearest section headers. The preferred way to read a board and to VERIFY your own changes (every block must show its text).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        boardId: { type: 'string' },
+      },
+      required: ['boardId'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'holst_search_text',
+    description:
+      'Case-insensitive substring search across all texts on a board. Returns matches with object id, type, position, snippet. Use for big boards instead of full dumps.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        boardId: { type: 'string' },
+        query: { type: 'string', description: 'Substring to search (case-insensitive)' },
+      },
+      required: ['boardId', 'query'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'holst_batch_create',
+    description:
+      'Create a whole diagram in ONE call — 10-15x faster than sequential add_* tools (30 objects in ~15s instead of minutes). ' +
+      'objects: array of { kind: "shape"|"sticker"|"simple-text"|"frame"|"stamp", ref?: "name", text?, x, y, ...options } plus ' +
+      '{ kind: "arrow", from: { ref, relativePoint? }|{ x, y }, to: ..., text?, textPosition?, strokeStyle?, arrowheadStart?, arrowheadEnd?, strokeWidth? } — ' +
+      'arrows support on-arrow labels, dashed/dotted styles and headless variants (arrowhead*: "none"). ' +
+      'Text objects support typography: fontSize, textColor (#RRGGBB ok), horizontalAlign, bold/italic/underline/strikethrough. ' +
+      'options.arrowsBehind: true places arrows BELOW the nodes (design-system layering). ' +
+      'ref is a local name (letters/digits/dash/_); arrows link refs instead of UUIDs; refs auto-generate when omitted. ' +
+      'Result maps each ref to { id, documentId, mounted, textOk } — verify with holst_get_board_summary afterwards. ' +
+      'Same fields/validation as the individual add_* tools; palette colors or #RRGGBB, top-left coords, batch limit 200.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        boardId: { type: 'string' },
+        objects: {
+          type: 'array',
+          description: 'Diagram entries; creations first, arrows reference refs',
+          items: { type: 'object' },
+        },
+        options: {
+          type: 'object',
+          description: 'Diagram-level options',
+          properties: {
+            arrowsBehind: { type: 'boolean', description: 'Place arrows below the created nodes (connectors behind boxes)' },
+          },
+          additionalProperties: false,
+        },
+      },
+      required: ['boardId', 'objects'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'holst_add_sticker',
+    description:
+      'Add a sticky note with text (default 192x192, yellow). ' + ADD_NOTE,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        boardId: { type: 'string' },
+        text: { type: 'string', description: 'Sticker text (plain, \\n = new paragraph)' },
+        x: { type: 'number', description: 'Top-left X on canvas' },
+        y: { type: 'number', description: 'Top-left Y on canvas' },
+        width: { type: 'number', default: 192 },
+        height: { type: 'number', default: 192 },
+      },
+      required: ['boardId', 'text', 'x', 'y'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'holst_update_text',
+    description:
+      'Replace the text of an existing object (sticker / shape / simple-text / arrow label). Pass plain `text` OR run-level `runs` (not both). Optional style params: fontSize, textScale, textColor, horizontalAlign, bold/italic/underline/strikethrough. Arrows: rewrites the on-arrow label, keeping its position. Multiline: \\n = new paragraph. Idempotent — safe to retry once. Takes 2-6s.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        boardId: { type: 'string' },
+        objectId: { type: 'string', description: 'From get_board_content / creation result' },
+        text: { type: 'string', description: 'Plain text (omit when using runs)' },
+        ...RUNS_PROP,
+        fontSize: { type: 'number' },
+        textScale: { type: 'number' },
+        textColor: { type: 'string' },
+        textOpacity: { type: 'number' },
+        textBackgroundColor: { type: 'string' },
+        horizontalAlign: { type: 'string' },
+        verticalAlign: { type: 'string' },
+        letterSpacing: { type: 'number' },
+        fontFamily: { type: 'string' },
+        lineHeight: { type: 'number' },
+        bold: { type: 'boolean' },
+        italic: { type: 'boolean' },
+        underline: { type: 'boolean' },
+        strikethrough: { type: 'boolean' },
+      },
+      required: ['boardId', 'objectId'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'holst_delete_object',
+    description:
+      'Delete an object AND its linked text document. Irreversible — confirm intent for bulk deletions.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        boardId: { type: 'string' },
+        objectId: { type: 'string' },
+      },
+      required: ['boardId', 'objectId'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'holst_delete_objects',
+    description:
+      'Delete MANY objects in ONE call (`ids` = object ids — the same ids called objectId in other tools; from get_board_content / creation results). ' +
+      'Cascade note: deleting a node removes its attached arrows too — those ids report {ok: true, alreadyGone: true}, not an error. ' +
+      'Uses the app-native removal path per id; result: { ok, deleted, report: {id: {ok|alreadyGone|error}} }. Limit 200 per call. Irreversible — confirm intent.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        boardId: { type: 'string' },
+        ids: { type: 'array', items: { type: 'string' }, description: 'Object ids from get_board_content / creation results' },
+      },
+      required: ['boardId', 'ids'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'holst_add_shape',
+    description:
+      'Add a shape with a text label (section headers, flow blocks). Types: ' + SHAPE_TYPES.join(', ') + '. Typography: fontSize, textColor (#RRGGBB ok), horizontalAlign, bold/italic/underline/strikethrough. ' + ADD_NOTE,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        boardId: { type: 'string' },
+        text: { type: 'string', description: 'Label inside the shape' },
+        x: { type: 'number' },
+        y: { type: 'number' },
+        width: { type: 'number', default: 240 },
+        height: { type: 'number', default: 48 },
+        shapeType: { type: 'string', default: 'square', description: SHAPE_TYPES_DESC },
+        borderRadius: { type: 'number', description: 'Corner rounding px — borderRadius = height/2 gives a capsule/pill' },
+        fillColor: { type: 'string', default: 'white6', description: 'Palette name or #RRGGBB' },
+        strokeColor: { type: 'string', default: 'gray12', description: 'Palette name or #RRGGBB' },
+        strokeWidth: { type: 'number', default: 2 },
+        fixedSize: { type: 'boolean', default: true },
+        ...TEXT_STYLE_PROPS,
+      },
+      required: ['boardId', 'x', 'y'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'holst_add_simple_text',
+    description:
+      'Add a plain text label (no background), auto-sized by content. Typography: fontSize in px (converts to internal scale), textColor, horizontalAlign, bold/italic. ' + ADD_NOTE,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        boardId: { type: 'string' },
+        text: { type: 'string' },
+        x: { type: 'number' },
+        y: { type: 'number' },
+        width: { type: 'number', description: 'Fixed width (enables horizontalAlign centering under nodes)' },
+        ...TEXT_STYLE_PROPS,
+      },
+      required: ['boardId', 'text', 'x', 'y'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'holst_add_arrow',
+    description:
+      'Connect two points or objects. Endpoint = { x, y } for a free point, or { objectId, relativePoint: { x, y } } to attach (0..1 of object bounds; 0.5/1 = bottom center). Create endpoint objects FIRST — you need their ids. ' +
+      'Optional text = on-arrow label; textPosition 0..1 places it along the path (default middle). ' +
+      'arrowheadStart/arrowheadEnd: none | miro | arc | figma (absent = default: no start head, standard end head; "none" disables). ' +
+      'strokeStyle: solid (default), dashed, dotted. strokeWidth: line thickness. fontSize/textColor style the label; colors accept palette tokens or #RRGGBB.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        boardId: { type: 'string' },
+        start: {
+          type: 'object',
+          description: '{ x, y } or { objectId, relativePoint: {x, y} }',
+        },
+        end: {
+          type: 'object',
+          description: '{ x, y } or { objectId, relativePoint: {x, y} }',
+        },
+        arrowType: { type: 'string', default: 'elbow', description: 'elbow, straight, curved' },
+        strokeColor: { type: 'string', default: 'gray10', description: 'Palette token or #RRGGBB' },
+        strokeStyle: { type: 'string', default: 'solid', description: STROKE_STYLES_DESC },
+        strokeWidth: { type: 'number', description: 'Line thickness (e.g. 2 thin, 5 medium, 17 fat)' },
+        arrowheadStart: { type: 'string', description: 'none, miro, arc, figma' },
+        arrowheadEnd: { type: 'string', description: 'none (disables default head), miro, arc, figma' },
+        text: { type: 'string', description: 'On-arrow label (\\n = new line)' },
+        textPosition: { type: 'number', default: 0.5, description: 'Label position along the arrow, 0..1 (0.5 = middle)' },
+        fontSize: { type: 'number', description: 'Label font size in px' },
+        textColor: { type: 'string', description: 'Label color: palette token or #RRGGBB' },
+      },
+      required: ['boardId', 'start', 'end'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'holst_move_object',
+    description: 'Move an object to new coordinates (top-left corner). Takes 1-3s.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        boardId: { type: 'string' },
+        objectId: { type: 'string' },
+        x: { type: 'number' },
+        y: { type: 'number' },
+      },
+      required: ['boardId', 'objectId', 'x', 'y'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'holst_resize_object',
+    description: 'Change width and/or height of a shape or sticker.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        boardId: { type: 'string' },
+        objectId: { type: 'string' },
+        width: { type: 'number' },
+        height: { type: 'number' },
+      },
+      required: ['boardId', 'objectId'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'holst_add_frame',
+    description:
+      'Add a large labeled container that sits BELOW content (groups a diagram). labelText is a plain field, no separate document. ' + ADD_NOTE,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        boardId: { type: 'string' },
+        labelText: { type: 'string', default: 'Frame', description: 'Frame title' },
+        x: { type: 'number' },
+        y: { type: 'number' },
+        width: { type: 'number', default: 800 },
+        height: { type: 'number', default: 600 },
+        fillColor: { type: 'string', default: 'white3' },
+      },
+      required: ['boardId', 'x', 'y'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'holst_add_stamp',
+    description:
+      'Add an emoji / text stamp (e.g. "❤️", "🔥"). text = the emoji itself. ' + ADD_NOTE,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        boardId: { type: 'string' },
+        text: { type: 'string', description: 'Emoji or short text' },
+        x: { type: 'number' },
+        y: { type: 'number' },
+        width: { type: 'number', default: 60 },
+        height: { type: 'number', default: 60 },
+        stampType: { type: 'string', default: 'textStamp' },
+      },
+      required: ['boardId', 'text', 'x', 'y'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'holst_set_color',
+    description:
+      'Set fillColor and/or strokeColor (palette tokens or #RRGGBB hex), strokeStyle (solid, dashed, dotted), strokeWidth, and/or fillOpacity / strokeOpacity (0..1 — translucent zones/washes). Full palette: holst_reference.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        boardId: { type: 'string' },
+        objectId: { type: 'string' },
+        fillColor: { type: 'string', description: 'Palette token or #RRGGBB' },
+        strokeColor: { type: 'string', description: 'Palette token or #RRGGBB' },
+        strokeStyle: { type: 'string', description: 'solid, dashed, dotted' },
+        strokeWidth: { type: 'number', description: 'Line thickness 0..100' },
+        fillOpacity: { type: 'number', description: 'Fill opacity 0..1 (keeps current color)' },
+        strokeOpacity: { type: 'number', description: 'Stroke opacity 0..1 (keeps current color)' },
+      },
+      required: ['boardId', 'objectId'],
+      additionalProperties: false,
+    },
+  },
+];
+
+export const DISPATCH = {
+  holst_whoami: (args) => whoAmI(),
+  holst_doctor: (args) => doctor(),
+  holst_reference: (args) => getReference(),
+  holst_list_boards: (args) => listBoards(),
+  holst_batch_create: (args) => batchCreate(args.boardId, args.objects, args.options || {}),
+  holst_get_board_content: (args) => getBoardContent(args.boardId, { bbox: args.bbox, positionsOnly: args.positionsOnly }),
+  holst_get_board_summary: (args) => getBoardSummary(args.boardId),
+  holst_search_text: (args) => searchBoardText(args.boardId, args.query),
+  holst_add_sticker: (args) => addSticker(args.boardId, args),
+  holst_update_text: (args) => updateText(args.boardId, args.objectId, args.text, args),
+  holst_delete_object: (args) => deleteObject(args.boardId, args.objectId),
+  holst_delete_objects: (args) => deleteObjects(args.boardId, args.ids),
+  holst_add_shape: (args) => addShape(args.boardId, args),
+  holst_add_simple_text: (args) => addSimpleText(args.boardId, args),
+  holst_add_arrow: (args) => addArrow(args.boardId, args),
+  holst_move_object: (args) => moveObject(args.boardId, args.objectId, { x: args.x, y: args.y }),
+  holst_resize_object: (args) => resizeObject(args.boardId, args.objectId, { width: args.width, height: args.height }),
+  holst_set_color: (args) => setColor(args.boardId, args.objectId, {
+    fillColor: args.fillColor, strokeColor: args.strokeColor, strokeStyle: args.strokeStyle,
+    strokeWidth: args.strokeWidth, fillOpacity: args.fillOpacity, strokeOpacity: args.strokeOpacity,
+  }),
+  holst_add_frame: (args) => addFrame(args.boardId, args),
+  holst_add_stamp: (args) => addStamp(args.boardId, args),
+};

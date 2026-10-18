@@ -17,28 +17,38 @@ MCP-сервер для работы с досками Holst.so (российс�
 | Тулза | Описание |
 |---|---|
 | `holst_list_boards` | Список всех досок и папок во всех workspace'ах. |
-| `holst_get_board_content` | Полный сырой Yjs-дамп доски: все объекты + все документы. |
+| `holst_get_board_content` | Полный сырой Yjs-дамп доски: все объекты + все документы. Экономия токенов: `bbox` / `positionsOnly`. |
 | `holst_get_board_summary` | Структурированный markdown: стикеры сгруппированы по ближайшему shape-заголовку. |
 | `holst_search_text` | Текстовый поиск по всем объектам доски. |
 
 ### Создание объектов
 | Тулза | Тип | Описание |
 |---|---|---|
+| `holst_batch_create` | * | **Вся диаграмма одним вызовом** (~10× быстрее): массив объектов с `ref`-именами + стрелки по ref'ам (с текстом и стилями). |
 | `holst_add_sticker` | sticker | Жёлтый стикер 192×192 |
-| `holst_add_shape` | shape | Фигура с текстом — square, ellipse, roundedRectangle, basic-star, и т.п. |
+| `holst_add_shape` | shape | Фигура с текстом — square, ellipse, roundedRectangle, basic-star, и т.п. Типографика: fontSize, textColor (hex), textOpacity, bold/italic, выравнивания, letterSpacing, fontFamily |
 | `holst_add_simple_text` | simple-text | Простой текстовый лейбл без фона |
-| `holst_add_arrow` | arrow | Стрелка между точками или объектами |
+| `holst_add_arrow` | arrow | Стрелка между точками или объектами — подпись (`text`, `textPosition` 0..1), стиль линии (solid/dashed/dotted), толщина, наконечники (`arrowheadStart/End`: none/miro/arc/figma), размер/цвет подписи |
 | `holst_add_frame` | frame | Большой контейнер с подписью (садится под контент) |
 | `holst_add_stamp` | stamp | Эмодзи / штамп 60×60 |
 
 ### Редактирование
 | Тулза | Описание |
 |---|---|
-| `holst_update_text` | Перезаписать текст в стикере / shape / simple-text |
+| `holst_update_text` | Перезаписать текст в стикере / shape / simple-text / подписи стрелки (+ стиль: fontSize, textColor, bold/italic; `\n` = параграф) |
 | `holst_move_object` | Переместить объект |
 | `holst_resize_object` | Изменить размер (для shape, sticker) |
-| `holst_set_color` | Установить fillColor / strokeColor |
+| `holst_set_color` | Установить fillColor / strokeColor (токен или #RRGGBB) / strokeStyle (solid/dashed/dotted) / strokeWidth / fillOpacity / strokeOpacity (0..1) |
+
+### Цвета и типографика (v0.4)
+- **Hex-цвета** принимают все цветовые параметры: `#RRGGBB` конвертируется во внутренний int-формат Holst
+- **Палитра**: 23 семейства × ~12 оттенков (gray, tomato, sky, violet, …) — точные цвета лучше задавать hex
+- **Шрифты**: токены PascalCase — `SourceCodePro` (моно), `Inter`, `EBGaramond`, `NotoSerif`, `Montserrat`, `Caveat`, …
+- **textOpacity** (0..1, с textColor) — полупрозрачные фоновые цифры «01/02»
+- **fillOpacity/strokeOpacity** — в batch прямо при создании, и в set_color
+- **verticalAlign** (top/center/bottom), **letterSpacing** (px)
 | `holst_delete_object` | Удалить объект |
+| `holst_delete_objects` | Массовое удаление одним вызовом (до 200, per-id отчёт) |
 
 Все изменения автоматически синкаются на других подключённых клиентов (Yjs CRDT).
 
@@ -164,7 +174,7 @@ Holst использует Bearer-токен в `Authorization` header (НЕ в 
 
 ### `holst_get_board_content`
 ```json
-{ "boardId": "372ea1bf-8bac-481b-94f2-ddd9088461ca" }
+{ "boardId": "123e4567-e89b-42d3-a456-426614174000" }
 ```
 Возвращает:
 ```json
@@ -204,6 +214,7 @@ Holst использует Bearer-токен в `Authorization` header (НЕ в 
 - **CDP-порт нужно держать открытым.** Если Holst упал или перезапущен без флага — MCP не подключится. `start-holst.sh` это лечит.
 - **Ничего не блокирует concurrent-редактирование** — если ты пишешь через MCP, и одновременно человек редактирует ту же доску в UI, Yjs всё мерджит. Но если объект только что удалён человеком и MCP пытается его обновить — будет ошибка `object not found`.
 - **Двухслойная модель текста (Holst ≥ 2026-10).** Рендер текста идёт из Slate-редактора, а не из сырого Y.Text: прямые `Y.Text.insert` лежат в yDoc, но НЕ отображаются, а при монтировании нового объекта приложение затирает документ своей пустой view-model. Поэтому MCP пишет текст через нативный конвейер приложения (`ds.store.objects.get(id).editor` → select-all → deleteFragment → paste; фолбэк — `singleDocumentStore.createFromString`). Чтение (`get_board_content` и производные) идёт через `toDelta()`. Запись после `add_*` делается с паузой ~2с на оседание биндинга + ретраями; если объект не смонтировался в доменный стор — тулз сам перезагружает вкладку (это лечит и «осиротевшие» редакторы).
+- **Удаления тоже двухслойны.** Raw `yObjects.delete()` убирает объект из yDoc, но доменный стор (и канвас) продолжают его рисовать до перезагрузки страницы. Поэтому `delete_object` использует нативный `objectsService.remove(id)` — он удаляет из yDoc И размонтирует объект из стора сразу; при лаге размонтирования тулз самолечится перезагрузкой. Повторное удаление уже удалённого даёт понятную ошибку «object not found».
 
 ## Безопасность
 
@@ -228,8 +239,9 @@ Holst использует Bearer-токен в `Authorization` header (НЕ в 
 | Переменная | По умолчанию | Что делает |
 |---|---|---|
 | `HOLST_AUTO_START` | `1` | MCP-сервер сам запускает Holst.app с CDP-портом, если приложение не работает (JS-порт `start-holst.sh`). `0` — выключить. |
-| `HOLST_ALLOWED_BOARD_IDS` | не задан | Список разрешённых boardId через запятую/пробел. Задан — все остальные доски блокируются (чтение и запись). |
-| `HOLST_READ_ONLY` | выкл | `1`/`true` — блокирует все изменяющие тулзы (add/update/delete/move/resize/set_color). |
+| `HOLST_RW_BOARD_IDS` | не задан | UUID досок с полным доступом (чтение + запись). Если задан хотя бы один из списков — доски вне обоих блокируются. |
+| `HOLST_RO_BOARD_IDS` | не задан | UUID досок только для чтения: читаются, но все изменяющие тулзы отказывают. Если id в обоих списках — побеждает RO (fail-closed). |
+| `HOLST_READ_ONLY` | выкл | Глобальный master-switch: `1`/`true` — блокирует все изменяющие тулзы на ВСЕХ досках. |
 | `HOLST_MAX_DUMP_BYTES` | `2000000` | Лимит размера сырого дампа доски (`holst_get_board_content`). Защита контекста LLM. |
 | `HOLST_DEBUG_PORT` | `9222` | Порт CDP. Учитывается и сервером, и автозапуском, и `start-holst.sh`. |
 

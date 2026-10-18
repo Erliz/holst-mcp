@@ -27,9 +27,10 @@ describe('getReference', () => {
   });
 
   test('documents env vars including auto-start', () => {
-    for (const v of ['HOLST_AUTO_START', 'HOLST_ALLOWED_BOARD_IDS', 'HOLST_READ_ONLY', 'HOLST_MAX_DUMP_BYTES', 'HOLST_DEBUG_PORT']) {
+    for (const v of ['HOLST_AUTO_START', 'HOLST_RW_BOARD_IDS', 'HOLST_RO_BOARD_IDS', 'HOLST_READ_ONLY', 'HOLST_MAX_DUMP_BYTES', 'HOLST_DEBUG_PORT']) {
       assert.ok(ref.envVars[v], v);
     }
+    assert.ok(!ref.envVars.HOLST_ALLOWED_BOARD_IDS, 'legacy var must be gone');
   });
 
   test('documents input limits matching validators', () => {

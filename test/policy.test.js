@@ -2,7 +2,8 @@ import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ValidationError,
-  assertBoardAllowed,
+  assertBoardReadable,
+  assertBoardWritable,
   assertNotReadOnly,
   limitDump,
   sanitizeError,
@@ -12,6 +13,8 @@ const SAVED = {};
 
 beforeEach(() => {
   SAVED.HOLST_ALLOWED_BOARD_IDS = process.env.HOLST_ALLOWED_BOARD_IDS;
+  SAVED.HOLST_RW_BOARD_IDS = process.env.HOLST_RW_BOARD_IDS;
+  SAVED.HOLST_RO_BOARD_IDS = process.env.HOLST_RO_BOARD_IDS;
   SAVED.HOLST_READ_ONLY = process.env.HOLST_READ_ONLY;
   SAVED.HOLST_MAX_DUMP_BYTES = process.env.HOLST_MAX_DUMP_BYTES;
 });
@@ -23,37 +26,79 @@ afterEach(() => {
   }
 });
 
-describe('assertBoardAllowed (HOLST_ALLOWED_BOARD_IDS)', () => {
-  test('unset allowlist permits any board', () => {
-    delete process.env.HOLST_ALLOWED_BOARD_IDS;
-    assert.doesNotThrow(() => assertBoardAllowed('372ea1bf-8bac-481b-94f2-ddd9088461ca'));
+const A = '123e4567-e89b-42d3-a456-426614174000';
+const B = '04a54183-ab12-cd34-ef56-000000000000';
+const C = '11111111-2222-3333-4444-555555555555';
+
+describe('board access lists (HOLST_RW_BOARD_IDS / HOLST_RO_BOARD_IDS)', () => {
+  test('both lists unset → any board readable and writable', () => {
+    delete process.env.HOLST_RW_BOARD_IDS;
+    delete process.env.HOLST_RO_BOARD_IDS;
+    assert.doesNotThrow(() => assertBoardReadable(A));
+    assert.doesNotThrow(() => assertBoardWritable(A));
   });
 
-  test('empty allowlist value permits any board', () => {
-    process.env.HOLST_ALLOWED_BOARD_IDS = '  ';
-    assert.doesNotThrow(() => assertBoardAllowed('372ea1bf-8bac-481b-94f2-ddd9088461ca'));
+  test('blank values count as unset', () => {
+    process.env.HOLST_RW_BOARD_IDS = '  ';
+    process.env.HOLST_RO_BOARD_IDS = ' ';
+    assert.doesNotThrow(() => assertBoardWritable(A));
   });
 
-  test('listed board ids pass (case-insensitive, comma/space separated)', () => {
-    process.env.HOLST_ALLOWED_BOARD_IDS =
-      '372EA1BF-8BAC-481B-94F2-DDD9088461CA, 04a54183-ab12-cd34-ef56-000000000000';
-    assert.doesNotThrow(() => assertBoardAllowed('372ea1bf-8bac-481b-94f2-ddd9088461ca'));
-    assert.doesNotThrow(() => assertBoardAllowed('04a54183-ab12-cd34-ef56-000000000000'));
+  test('RW board: readable and writable (case-insensitive, comma/space separated)', () => {
+    process.env.HOLST_RW_BOARD_IDS = A.toUpperCase() + ', ' + B;
+    delete process.env.HOLST_RO_BOARD_IDS;
+    assert.doesNotThrow(() => assertBoardReadable(A));
+    assert.doesNotThrow(() => assertBoardWritable(A));
+    assert.doesNotThrow(() => assertBoardWritable(B));
   });
 
-  test('board outside allowlist throws ValidationError', () => {
-    process.env.HOLST_ALLOWED_BOARD_IDS = '372ea1bf-8bac-481b-94f2-ddd9088461ca';
-    assert.throws(
-      () => assertBoardAllowed('04a54183-ab12-cd34-ef56-000000000000'),
-      ValidationError
-    );
+  test('RO board: readable, NOT writable', () => {
+    delete process.env.HOLST_RW_BOARD_IDS;
+    process.env.HOLST_RO_BOARD_IDS = A;
+    assert.doesNotThrow(() => assertBoardReadable(A));
+    assert.throws(() => assertBoardWritable(A), ValidationError);
   });
 
-  test('malformed allowlist entries are ignored', () => {
-    process.env.HOLST_ALLOWED_BOARD_IDS =
-      'not-a-uuid, 372ea1bf-8bac-481b-94f2-ddd9088461ca, ""';
-    assert.doesNotThrow(() => assertBoardAllowed('372ea1bf-8bac-481b-94f2-ddd9088461ca'));
-    assert.throws(() => assertBoardAllowed('04a54183-ab12-cd34-ef56-000000000000'), ValidationError);
+  test('board in neither list → refused for read and write', () => {
+    process.env.HOLST_RW_BOARD_IDS = A;
+    process.env.HOLST_RO_BOARD_IDS = B;
+    assert.throws(() => assertBoardReadable(C), ValidationError);
+    assert.throws(() => assertBoardWritable(C), ValidationError);
+  });
+
+  test('board in RO-only while RW list set → readable, not writable', () => {
+    process.env.HOLST_RW_BOARD_IDS = A;
+    process.env.HOLST_RO_BOARD_IDS = B;
+    assert.doesNotThrow(() => assertBoardReadable(B));
+    assert.throws(() => assertBoardWritable(B), ValidationError);
+  });
+
+  test('fail-closed: id in BOTH lists → read-only wins', () => {
+    process.env.HOLST_RW_BOARD_IDS = A + ',' + B;
+    process.env.HOLST_RO_BOARD_IDS = B;
+    assert.doesNotThrow(() => assertBoardReadable(B));
+    assert.throws(() => assertBoardWritable(B), ValidationError);
+  });
+
+  test('legacy HOLST_ALLOWED_BOARD_IDS is fully removed — no effect', () => {
+    delete process.env.HOLST_RW_BOARD_IDS;
+    delete process.env.HOLST_RO_BOARD_IDS;
+    process.env.HOLST_ALLOWED_BOARD_IDS = A;
+    // lists unset → unrestricted, legacy var must not restrict anything
+    assert.doesNotThrow(() => assertBoardWritable(C));
+  });
+
+  test('malformed entries are ignored in both lists', () => {
+    process.env.HOLST_RW_BOARD_IDS = 'not-a-uuid, ' + A;
+    process.env.HOLST_RO_BOARD_IDS = '"" , xxx';
+    assert.doesNotThrow(() => assertBoardWritable(A));
+    assert.throws(() => assertBoardReadable(B), ValidationError);
+  });
+
+  test('write error message names the RO list (actionable)', () => {
+    process.env.HOLST_RO_BOARD_IDS = A;
+    delete process.env.HOLST_RW_BOARD_IDS;
+    assert.throws(() => assertBoardWritable(A), /HOLST_RO_BOARD_IDS/);
   });
 });
 

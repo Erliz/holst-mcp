@@ -4,7 +4,7 @@ import { isHolstUrl, isBoardUrl } from '../src/cdp.js';
 
 describe('isHolstUrl', () => {
   test('accepts app.holst.so board url', () => {
-    assert.equal(isHolstUrl('https://app.holst.so/board/372ea1bf-8bac-481b-94f2-ddd9088461ca'), true);
+    assert.equal(isHolstUrl('https://app.holst.so/board/123e4567-e89b-42d3-a456-426614174000'), true);
   });
 
   test('accepts app.holst.so root', () => {
@@ -34,7 +34,7 @@ describe('isHolstUrl', () => {
 });
 
 describe('isBoardUrl', () => {
-  const UUID = '372ea1bf-8bac-481b-94f2-ddd9088461ca';
+  const UUID = '123e4567-e89b-42d3-a456-426614174000';
 
   test('accepts exact board url', () => {
     assert.equal(isBoardUrl(`https://app.holst.so/board/${UUID}`, UUID), true);

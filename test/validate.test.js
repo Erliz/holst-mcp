@@ -8,12 +8,22 @@ import {
   safeToken,
   assertText,
   assertArrowEndpoint,
+  assertStrokeStyle,
+  parseColor,
+  assertArrowhead,
+  assertOpacity,
+  assertHorizontalAlign,
+  assertNoMarkdown,
+  assertRuns,
+  assertBorderRadius,
+  assertShapeType,
+  assertArrowType,
 } from '../src/validate.js';
 
 describe('assertBoardId', () => {
   test('accepts a valid UUID', () => {
     assert.doesNotThrow(() =>
-      assertBoardId('372ea1bf-8bac-481b-94f2-ddd9088461ca')
+      assertBoardId('123e4567-e89b-42d3-a456-426614174000')
     );
   });
 
@@ -42,7 +52,7 @@ describe('assertBoardId', () => {
 
   test('rejects almost-UUID', () => {
     assert.throws(
-      () => assertBoardId('372ea1bf-8bac-481b-94f2-ddd9088461c'),
+      () => assertBoardId('123e4567-e89b-42d3-a456-42661417400'),
       ValidationError
     );
     assert.throws(() => assertBoardId(''), ValidationError);
@@ -141,6 +151,191 @@ describe('assertText', () => {
 
   test('rejects overlong text', () => {
     assert.throws(() => assertText('x'.repeat(100001), 'text'), ValidationError);
+  });
+});
+
+describe('assertStrokeStyle', () => {
+  test('accepts solid, dashed, dotted', () => {
+    assert.equal(assertStrokeStyle('solid', 'strokeStyle'), 'solid');
+    assert.equal(assertStrokeStyle('dashed', 'strokeStyle'), 'dashed');
+    assert.equal(assertStrokeStyle('dotted', 'strokeStyle'), 'dotted');
+  });
+
+  test('undefined falls back to default', () => {
+    assert.equal(assertStrokeStyle(undefined, 'strokeStyle', { default: 'solid' }), 'solid');
+    assert.equal(assertStrokeStyle(undefined, 'strokeStyle', { default: 'dotted' }), 'dotted');
+  });
+
+  test('rejects unknown, injection and non-string values', () => {
+    assert.throws(() => assertStrokeStyle('wavy', 'strokeStyle'), ValidationError);
+    assert.throws(() => assertStrokeStyle("solid'};evil()", 'strokeStyle'), ValidationError);
+    assert.throws(() => assertStrokeStyle(42, 'strokeStyle'), ValidationError);
+    assert.throws(() => assertStrokeStyle(null, 'strokeStyle'), ValidationError);
+  });
+});
+
+describe('parseColor (palette token or #RRGGBB)', () => {
+  test('palette token passes through as string', () => {
+    assert.equal(parseColor('gray12', 'fillColor'), 'gray12');
+    assert.equal(parseColor('sky10', 'textColor'), 'sky10');
+  });
+
+  test('hex converts to int', () => {
+    assert.equal(parseColor('#782baf', 'textColor'), 7875503);
+    assert.equal(parseColor('#F20606', 'strokeColor'), 15861254);
+    assert.equal(parseColor('#000000', 'fillColor'), 0);
+    assert.equal(parseColor('#ffffff', 'fillColor'), 0xffffff);
+  });
+
+  test('rejects malformed hex, injection and non-strings', () => {
+    assert.throws(() => parseColor('#12g567', 'fillColor'), ValidationError);
+    assert.throws(() => parseColor('#12345', 'fillColor'), ValidationError);
+    assert.throws(() => parseColor("red'};evil()", 'fillColor'), ValidationError);
+    assert.throws(() => parseColor(42, 'fillColor'), ValidationError);
+  });
+});
+
+describe('assertArrowhead', () => {
+  test('accepts verified shapes', () => {
+    assert.equal(assertArrowhead('none', 'arrowheadEnd'), 'none');
+    assert.equal(assertArrowhead('miro', 'arrowheadStart'), 'miro');
+    assert.equal(assertArrowhead('arc', 'arrowheadEnd'), 'arc');
+    assert.equal(assertArrowhead('figma', 'arrowheadEnd'), 'figma');
+  });
+
+  test('undefined stays undefined (field omitted = Holst default)', () => {
+    assert.equal(assertArrowhead(undefined, 'arrowheadEnd'), undefined);
+  });
+
+  test('rejects unknown and injection values', () => {
+    assert.throws(() => assertArrowhead('triangle!!', 'x'), ValidationError);
+    assert.throws(() => assertArrowhead("miro'};evil()", 'x'), ValidationError);
+    assert.throws(() => assertArrowhead(42, 'x'), ValidationError);
+  });
+});
+
+describe('assertOpacity', () => {
+  test('accepts 0..1', () => {
+    assert.equal(assertOpacity(0.03, 'fillOpacity'), 0.03);
+    assert.equal(assertOpacity(1, 'fillOpacity'), 1);
+    assert.equal(assertOpacity(0, 'fillOpacity'), 0);
+  });
+
+  test('rejects out-of-range and non-numbers', () => {
+    assert.throws(() => assertOpacity(1.5, 'x'), ValidationError);
+    assert.throws(() => assertOpacity(-0.1, 'x'), ValidationError);
+    assert.throws(() => assertOpacity('half', 'x'), ValidationError);
+  });
+});
+
+describe('assertHorizontalAlign', () => {
+  test('accepts left/center/right/justify', () => {
+    for (const v of ['left', 'center', 'right', 'justify']) {
+      assert.equal(assertHorizontalAlign(v, 'horizontalAlign'), v);
+    }
+  });
+
+  test('undefined → undefined', () => {
+    assert.equal(assertHorizontalAlign(undefined, 'horizontalAlign'), undefined);
+  });
+
+  test('rejects others', () => {
+    assert.throws(() => assertHorizontalAlign('middle', 'x'), ValidationError);
+  });
+});
+
+describe('assertNoMarkdown', () => {
+  test('plain text and legit asterisks/underscores pass', () => {
+    assert.doesNotThrow(() => assertNoMarkdown('plain text'));
+    assert.doesNotThrow(() => assertNoMarkdown('3 * 4 * 5 = 60'));
+    assert.doesNotThrow(() => assertNoMarkdown('snake_case_name'));
+  });
+
+  test('bold/italic markdown rejected with a helpful error', () => {
+    assert.throws(() => assertNoMarkdown('**важно**'), /bold/);
+    assert.throws(() => assertNoMarkdown('*курсив*'), /italic/);
+    assert.throws(() => assertNoMarkdown('_курсив_'), /italic/);
+  });
+});
+
+describe('assertRuns (run-level styled text)', () => {
+  test('valid runs pass and normalize', () => {
+    const runs = assertRuns([
+      { text: 'Name', color: '#bf4520', bold: true },
+      { text: 'Sublabel', color: 'gray12', italic: true },
+    ], 'runs');
+    assert.deepEqual(runs, [
+      { text: 'Name', color: 0xbf4520, marks: { bold: true } },
+      { text: 'Sublabel', color: 'gray12', marks: { italic: true } },
+    ]);
+  });
+
+  test('run without style collapses to plain segment', () => {
+    assert.deepEqual(assertRuns([{ text: 'plain' }], 'runs'), [{ text: 'plain' }]);
+  });
+
+  test('rejects non-array, empty runs, non-string text, bad color', () => {
+    assert.throws(() => assertRuns('nope', 'runs'), ValidationError);
+    assert.throws(() => assertRuns([], 'runs'), ValidationError);
+    assert.throws(() => assertRuns([{ text: 42 }], 'runs'), ValidationError);
+    assert.throws(() => assertRuns([{ text: 'x', color: 'not a color!' }], 'runs'), ValidationError);
+  });
+
+  test('markdown inside run text rejected', () => {
+    assert.throws(() => assertRuns([{ text: '**bold**' }], 'runs'), /bold/);
+  });
+
+  test('idempotent: normalizing already-normalized runs is a no-op', () => {
+    const once = assertRuns([{ text: 'x', color: '#bf4520', bold: true }], 'runs');
+    const twice = assertRuns(once, 'runs');
+    assert.deepEqual(twice, once);
+  });
+});
+
+describe('assertBorderRadius', () => {
+  test('accepts 0..500 numbers', () => {
+    assert.equal(assertBorderRadius(20, 'borderRadius'), 20);
+    assert.equal(assertBorderRadius(40, 'borderRadius'), 40);
+    assert.equal(assertBorderRadius(0, 'borderRadius'), 0);
+  });
+
+  test('rejects out-of-range and non-numbers', () => {
+    assert.throws(() => assertBorderRadius(501, 'x'), ValidationError);
+    assert.throws(() => assertBorderRadius(-1, 'x'), ValidationError);
+    assert.throws(() => assertBorderRadius('round', 'x'), ValidationError);
+  });
+});
+
+describe('assertShapeType (whitelist — silent-fallback guard)', () => {
+  test('accepts the five verified shape tokens', () => {
+    for (const t of ['square', 'round-rect', 'diamond', 'triangle', 'ellipse']) {
+      assert.equal(assertShapeType(t, 'shapeType'), t);
+    }
+  });
+
+  test('rhombus rejected with the valid list (it silently rendered as rectangle)', () => {
+    assert.throws(() => assertShapeType('rhombus', 'shapeType'), /square, round-rect, diamond, triangle, ellipse/);
+    assert.throws(() => assertShapeType('hexagon', 'shapeType'), ValidationError);
+  });
+
+  test('undefined falls back to square', () => {
+    assert.equal(assertShapeType(undefined, 'shapeType', { default: 'square' }), 'square');
+  });
+});
+
+describe('assertArrowType (whitelist)', () => {
+  test('accepts straight/elbow/curved', () => {
+    for (const t of ['straight', 'elbow', 'curved']) {
+      assert.equal(assertArrowType(t, 'arrowType'), t);
+    }
+  });
+
+  test('rejects unknown with the valid list', () => {
+    assert.throws(() => assertArrowType('zigzag', 'arrowType'), /straight, elbow, curved/);
+  });
+
+  test('undefined defaults to elbow', () => {
+    assert.equal(assertArrowType(undefined, 'arrowType', { default: 'elbow' }), 'elbow');
   });
 });
 

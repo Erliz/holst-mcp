@@ -164,6 +164,71 @@ export class CDPSession {
  * Open a CDP session against the first holst tab matching predicate (default: workspace or board).
  * Caller must call session.close() after use.
  */
+
+// ---- Session pool -------------------------------------------------------
+// Reusing one CDP WebSocket per board removes ~0.5-1s of setup from every
+// tool call. Entries are keyed (e.g. 'board:<uuid>'); released sessions stay
+// alive for an idle TTL, dead sockets are evicted on sight, and concurrent
+// acquires share a single creation (single-flight).
+
+const POOL_TTL_MS = 60_000;
+const pool = new Map(); // key -> { session, timer?, creating? }
+
+function pooledEntry(key, factory) {
+  let entry = pool.get(key);
+  if (entry?.creating) return entry.creating;
+  if (entry && !entry.creating && entry.session.ws?.readyState === WebSocket.OPEN) {
+    if (entry.timer) { clearTimeout(entry.timer); delete entry.timer; }
+    return Promise.resolve(entry.session);
+  }
+  if (entry && entry.timer) clearTimeout(entry.timer);
+  pool.delete(key);
+  const creating = factory().then((session) => {
+    const cur = pool.get(key);
+    if (cur?.creating === creating) {
+      delete cur.creating;
+      cur.session = session;
+    } else if (!pool.has(key)) {
+      pool.set(key, { session });
+    }
+    return session;
+  }).catch((e) => {
+    if (pool.get(key)?.creating === creating) pool.delete(key);
+    throw e;
+  });
+  pool.set(key, { creating });
+  return creating;
+}
+
+export async function acquirePooledSession(key, factory) {
+  return pooledEntry(key, factory);
+}
+
+export function releaseSession(session) {
+  for (const [key, entry] of pool.entries()) {
+    if (entry.session === session) {
+      entry.timer = setTimeout(() => {
+        try { session.close(); } catch {}
+        pool.delete(key);
+      }, POOL_TTL_MS);
+      entry.timer.unref?.();
+      return key;
+    }
+  }
+  // not pooled — close for real
+  try { session.close(); } catch {}
+  return null;
+}
+
+export function __clearPoolForTests() {
+  for (const [, entry] of pool.entries()) {
+    if (entry.timer) clearTimeout(entry.timer);
+    if (entry.session) { try { entry.session.close(); } catch {} }
+  }
+  pool.clear();
+}
+// -------------------------------------------------------------------------
+
 export async function openHolstSession({ tabPredicate } = {}) {
   const tab = await findHolstTab({ predicate: tabPredicate });
   if (!tab) {
