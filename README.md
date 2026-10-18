@@ -18,16 +18,16 @@ MCP-сервер для работы с досками Holst.so (российс�
 |---|---|
 | `holst_list_boards` | Список всех досок и папок во всех workspace'ах. |
 | `holst_get_board_content` | Полный сырой Yjs-дамп доски: все объекты + все документы. Экономия токенов: `bbox` / `positionsOnly`. |
-| `holst_get_board_summary` | Структурированный markdown: стикеры сгруппированы по ближайшему shape-заголовку. |
+| `holst_get_board_summary` | Структурированный markdown: стикеры по ближайшим shape-заголовкам + секции фреймов + инвентарь стрелок (`from→to · label · стиль`). |
 | `holst_search_text` | Текстовый поиск по всем объектам доски. |
 
 ### Создание объектов
 | Тулза | Тип | Описание |
 |---|---|---|
-| `holst_batch_create` | * | **Вся диаграмма одним вызовом** (~10× быстрее): массив объектов с `ref`-именами + стрелки по ref'ам (с текстом и стилями). |
+| `holst_batch_create` | * | **Вся диаграмма одним вызовом** (~10× быстрее): объекты с `ref` + стрелки по ref'ам **или по `objectId` существующих объектов**; подписи, стили, наконечники, zIndex, `arrowsBehind`; `ref` у стрелок попадает в результат. |
 | `holst_add_sticker` | sticker | Жёлтый стикер 192×192 |
-| `holst_add_shape` | shape | Фигура с текстом — square, ellipse, roundedRectangle, basic-star, и т.п. Типографика: fontSize, textColor (hex), textOpacity, bold/italic, выравнивания, letterSpacing, fontFamily |
-| `holst_add_simple_text` | simple-text | Простой текстовый лейбл без фона |
+| `holst_add_shape` | shape | Фигура с текстом. Типы (whitelist): **square, round-rect, diamond, triangle, ellipse**; `borderRadius` (= h/2 → капсула). Типографика: fontSize, textColor (hex), textOpacity, bold/italic, выравнивания, letterSpacing, fontFamily, runs |
+| `holst_add_simple_text` | simple-text | Текстовый лейбл без фона: авторазмер или `width`+`horizontalAlign` для центрирования; типографика и `runs` — как у shape |
 | `holst_add_arrow` | arrow | Стрелка между точками или объектами — подпись (`text`, `textPosition` 0..1), стиль линии (solid/dashed/dotted), толщина, наконечники (`arrowheadStart/End`: none/miro/arc/figma), размер/цвет подписи |
 | `holst_add_frame` | frame | Большой контейнер с подписью (садится под контент) |
 | `holst_add_stamp` | stamp | Эмодзи / штамп 60×60 |
@@ -39,23 +39,25 @@ MCP-сервер для работы с досками Holst.so (российс�
 | `holst_move_object` | Переместить объект |
 | `holst_resize_object` | Изменить размер (для shape, sticker) |
 | `holst_set_color` | Установить fillColor / strokeColor (токен или #RRGGBB) / strokeStyle (solid/dashed/dotted) / strokeWidth / fillOpacity / strokeOpacity (0..1) |
+| `holst_delete_object` | Удалить объект |
+| `holst_delete_objects` | Массовое удаление одним вызовом (до 200 id, per-id отчёт; каскадно удалённые — `{ok: true, alreadyGone: true}`, не ошибка) |
 
-### Цвета и типографика (v0.4)
+Все изменения автоматически синкаются на других подключённых клиентов (Yjs CRDT).
+
+### Цвета и типографика (v0.5)
 - **Hex-цвета** принимают все цветовые параметры: `#RRGGBB` конвертируется во внутренний int-формат Holst
 - **Палитра**: 23 семейства × ~12 оттенков (gray, tomato, sky, violet, …) — точные цвета лучше задавать hex
 - **Шрифты**: токены PascalCase — `SourceCodePro` (моно), `Inter`, `EBGaramond`, `NotoSerif`, `Montserrat`, `Caveat`, …
 - **textOpacity** (0..1, с textColor) — полупрозрачные фоновые цифры «01/02»
 - **fillOpacity/strokeOpacity** — в batch прямо при создании, и в set_color
-- **verticalAlign** (top/center/bottom), **letterSpacing** (px)
-| `holst_delete_object` | Удалить объект |
-| `holst_delete_objects` | Массовое удаление одним вызовом (до 200, per-id отчёт) |
+- **runs**: `[{text, color, bold, italic, underline, strikethrough}]` — несколько цветов/стилей в ОДНОМ тексте (через `singleDocumentStore.createFromJSON`)
+- **verticalAlign** (top/center/bottom), **letterSpacing** (px), **borderRadius** (капсула = round-rect + h/2)
 
-Все изменения автоматически синкаются на других подключённых клиентов (Yjs CRDT).
-
-### Что НЕ поддерживается в v0.2.0
-- **drawing (P)** — рисование от руки. Содержит сложный path в виде строки координат (`"0,0,8.2,-11.7,..."`), кривые Безье, pivot. Требует написания path-генератора. Можно добавить в v0.3 если понадобится.
+### Что НЕ поддерживается (v0.5)
+- **drawing (P)** — рисование от руки. Содержит сложный path в виде строки координат (`"0,0,8.2,-11.7,..."`), кривые Безье, pivot. Требует написания path-генератора.
 - **task-card / kanban / voting / reaction-stamp** — нишевые типы, не требовались.
-- **Прикрепление объектов в parentId** (вложение в фрейм) — добавляется одним `move_object` после, но автоматического вложения нет.
+- **Списки в тексте** (dots/numbered/check) — двухуровневая модель редактора, отдельная задача.
+- **parentId-вложение при создании** — приложение не использует поле для вложения; workaround — позиционирование в границы фрейма.
 
 ## Требования
 
@@ -72,7 +74,9 @@ npm install
 chmod +x bin/start-holst.sh
 ```
 
-Зарегистрировать в `~/.claude/settings.json` (путь — ваш):
+Зарегистрировать в MCP-клиенте (путь — ваш).
+
+**Claude Code** — `~/.claude/settings.json`:
 
 ```json
 {
@@ -84,6 +88,29 @@ chmod +x bin/start-holst.sh
   }
 }
 ```
+
+**OpenCode v2** — глобально в `~/.config/opencode/opencode.jsonc` (или в проекте как `opencode.jsonc`; в проекте конфиг затирает глобальный):
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "holst": {
+        "type": "local",
+        "command": ["node", "/abs/path/to/holst-mcp/src/server.js"],
+        "enabled": true,
+        "environment": {
+          "HOLST_AUTO_START": "1",
+          "HOLST_RW_BOARD_IDS": "допустимые-uuid-досок"
+        }
+      }
+    }
+  }
+}
+```
+
+Проверка в OpenCode: `opencode mcp list` (или `/mcps` в TUI). После правок кода сервера перезапусти MCP — процесс живёт в памяти и не подхватит изменения сам.
 
 ## Запуск Holst в режиме CDP
 
@@ -205,11 +232,11 @@ Holst использует Bearer-токен в `Authorization` header (НЕ в 
 ```json
 { "boardId": "...", "objectId": "...", "text": "новый текст" }
 ```
-Меняет текст в существующем объекте (стикер/секция/простой текст). Внутри — `Y.Text.delete + insert`, не пересоздаёт объект.
+Меняет текст в существующем объекте (стикер/shape/simple-text/подпись стрелки; для стрелок — перезапись `texts[0]` с сохранением позиции метки). `text` можно заменить на `runs: [{text, color, bold}]` — несколько стилей в одном объекте. Пишет через нативный Slate-конвейер приложения (paste в смонтированный редактор; для run-цветов — `singleDocumentStore.createFromJSON`), с паузой на оседание биндинга и ретраями; верификация срабатывания — параграф/mark-aware. Не пересоздаёт объект.
 
 ## Подводные камни
 
-- **Holst-апдейт может сломать схему.** Версия проверена: Holst 0.0.2 (Electron 29.4.6). Если в новой версии изменятся имена share-ключей (`documents`, `objects`), кейсы Yjs или window-глобалы (`window.ds`, `window.Yjs`) — нужно править `src/holst.js`.
+- **Holst-апдейт может сломать схему.** Проверено на сборках Holst 0.0.2 (Electron 29.4.6) и 2026-10 (двухслойная текстовая модель — см. ниже). Если в новой версии изменятся имена share-ключей (`documents`, `objects`), кейсы Yjs или window-глобалы (`window.ds`, `window.Yjs`) — нужно править `src/holst.js`.
 - **Bearer-токен ротируется при логауте.** Если пользователь разлогинился — MCP отдаст ошибку, нужно запустить `start-holst.sh` и снова залогиниться.
 - **CDP-порт нужно держать открытым.** Если Holst упал или перезапущен без флага — MCP не подключится. `start-holst.sh` это лечит.
 - **Ничего не блокирует concurrent-редактирование** — если ты пишешь через MCP, и одновременно человек редактирует ту же доску в UI, Yjs всё мерджит. Но если объект только что удалён человеком и MCP пытается его обновить — будет ошибка `object not found`.
@@ -259,7 +286,7 @@ MCP спроектирован так, чтобы **любой агент в л�
 
 ### Что уже сделано в коде
 
-- Строгая валидация входов: `boardId` — только UUID (защита от навигации вкладки на произвольный URL), координаты/размеры — конечные числа (защита Yjs от `NaN`/`Infinity`), типы и цвета — whitelist-charset.
+- Строгая валидация входов: `boardId` — только UUID (защита от навигации вкладки на произвольный URL), координаты/размеры — конечные числа (защита Yjs от `NaN`/`Infinity`), цвета — токен-палитра или `#RRGGBB`, типы — enum-whitelist'ы (единый источник: списки экспортируются из `validate.js`, описания схем и справочник генерируются из них же).
 - Проверка origin по `new URL().hostname === 'app.holst.so'` вместо substring (раньше матчился `https://evil.com/?app.holst.so`).
 - Таймауты на все CDP-операции + reject зависших запросов при обрыве соединения.
 - Санитизация ошибок: стектреки и внутренности не попадают в LLM-контекст.
@@ -293,14 +320,24 @@ npm test
 Структура:
 ```
 src/
-├── server.js       # MCP-сервер (stdio)
-├── cdp.js          # CDP-клиент над WebSocket + строгая проверка origin
-├── validate.js     # Валидация входных аргументов тулз
-├── policy.js       # Allowlist досок, read-only, лимит дампа, санитизация ошибок
-└── holst.js        # Holst-специфика (yDoc, gapi, тулзы)
-test/               # Юнит-тесты (node:test)
+├── server.js        # MCP-сервер (stdio): транспорт + роутинг на DISPATCH
+├── tools-schema.js  # Схемы тулз + диспетч (тестируемые; инвариант schema↔dispatch)
+├── eval-scripts.js  # Билдеры page-eval скриптов (компиляция/инъекции под тестами)
+├── holst.js         # Holst-специфика: сессии, оркестрация тулз, yDoc
+├── batch.js         # Batch-планировщик (чистая валидация плана)
+├── arrow-text.js    # Payload подписей стрелок (plain texts + Slate-дерево)
+├── text-style.js    # Типографика: styleExtras, runs → сегменты/HTML/Slate-ноды
+├── text-match.js    # Параграф/mark-aware сравнение текстов (multiline-фикс)
+├── validate.js      # Валидация входов + enum-источник правды (whitelist'ы)
+├── policy.js        # Allowlist досок, read-only, лимит дампа, санитизация
+├── reference.js     # holst_reference (палитры/шрифты/типы — из enum'ов)
+├── docs.js          # MCP-resource usage-мануал
+├── autostart.js     # Автозапуск Holst.app с CDP
+└── cdp.js           # CDP-клиент над WebSocket + строгая проверка origin
+test/                # 247 тестов (node:test): юнит + fake-ds (L2) + relation-инварианты
+docs/plans/          # Инженерные планы (unit-testing, инварианты, карта поверхностей)
 bin/
-└── start-holst.sh  # Запускает Holst.app с дебаг-флагом
+└── start-holst.sh   # Запускает Holst.app с дебаг-флагом
 ```
 
 ## Лицензия
