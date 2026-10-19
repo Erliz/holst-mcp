@@ -23,7 +23,7 @@ function makeSession({ captureError } = {}) {
         return { canvasRect: CANVAS, dpr: DPR, viewport: VIEWPORT, zoom: 0.9 };
       }
       if (expr.includes('setViewportCenter')) {
-        if (expr.includes('nav.zoom = 0.9')) return { ok: true }; // restore call
+        if (expr.includes('setZoomManual(0.9)')) return { ok: true, zoom: 0.9 }; // restore call (literal embedded zoom)
         return { applied: { center: { x: 1, y: 2 }, zoom: 1.2 } }; // fit call
       }
       return { __error: 'unrecognized expr' };
@@ -83,7 +83,7 @@ describe('screenshotWithSession (stub session)', () => {
     const { session } = makeSession();
     session.evaluate = async (expr) => {
       if (expr.includes('canvasRect')) return { canvasRect: CANVAS, dpr: DPR, viewport: VIEWPORT, zoom: 0.9 };
-      if (expr.includes('nav.zoom = 0.9')) return { __error: 'restore failed in-page' }; // restore fails (literal zoom = restore expr)
+      if (expr.includes('setZoomManual(0.9)')) return { __error: 'restore failed in-page' }; // restore fails (literal zoom = restore expr)
       if (expr.includes('setViewportCenter')) return { applied: { center: { x: 1, y: 2 }, zoom: 1.2 } }; // fit (dynamic zoom, no literal)
       return { __error: 'unrecognized expr' };
     };

@@ -546,7 +546,8 @@ export function buildBatchTextWriteExpr(byIndex, textJobs) {  return `(() => {
 export function buildCanvasStateExpr() {
   return `(() => {
     try {
-      const obj = ds.store.objects.entries().next().value?.[1];
+      const ds = window.ds;
+      const obj = ds && ds.store && ds.store.objects && ds.store.objects.entries().next().value?.[1];
       if (!obj) return { __error: 'board has no objects to reach the navigation service' };
       const nav = obj.objectBoundsService.visibilityService.navigationService;
       const cc = nav.canvasContainer;
@@ -562,6 +563,18 @@ export function buildCanvasStateExpr() {
   })()`;
 }
 
+// Camera zoom writes go through the app's method API. On current builds
+// (verified live, Holst 0.0.7 — issue #15) `zoom` is a GETTER-ONLY accessor
+// on the navigation service prototype, so a bare `nav.zoom = x` assignment
+// is a silent no-op under CDP's sloppy-mode Runtime.evaluate. `setZoomManual`
+// was verified effective and matches a manual user camera move; `setZoom` is
+// the same absolute-scale setter; the bare write stays as a fallback for
+// older builds where `zoom` was a writable field.
+const cameraZoomWrite = (valueExpr) => `
+      if (typeof nav.setZoomManual === 'function') nav.setZoomManual(${valueExpr});
+      else if (typeof nav.setZoom === 'function') nav.setZoom(${valueExpr});
+      else nav.zoom = ${valueExpr};`;
+
 /**
  * Fit the camera onto a world bbox (padding fraction applied in-page) and
  * report the exact applied center/zoom so the caller can restore later.
@@ -572,7 +585,8 @@ export function buildCameraFitExpr(bbox, padFraction = 0.12) {
   const pad = Number(padFraction);
   return `(() => {
     try {
-      const obj = ds.store.objects.entries().next().value?.[1];
+      const ds = window.ds;
+      const obj = ds && ds.store && ds.store.objects && ds.store.objects.entries().next().value?.[1];
       if (!obj) return { __error: 'board has no objects to reach the navigation service' };
       const nav = obj.objectBoundsService.visibilityService.navigationService;
       const v = nav.viewportRect;
@@ -582,8 +596,7 @@ export function buildCameraFitExpr(bbox, padFraction = 0.12) {
       let zoom = Math.min(viewW / w, viewH / h);
       if (!Number.isFinite(zoom) || zoom <= 0) return { __error: 'computed zoom is not finite' };
       const cx = (${x1} + ${x2}) / 2, cy = (${y1} + ${y2}) / 2;
-      nav.setViewportCenter(cx, cy);
-      nav.zoom = zoom;
+      nav.setViewportCenter(cx, cy);${cameraZoomWrite('zoom')}
       // Report the APPLIED zoom: the setter may clamp extreme fits.
       return { applied: { center: { x: cx, y: cy }, zoom: nav.zoom } };
     } catch (e) { return { __error: String(e) }; }
@@ -591,17 +604,17 @@ export function buildCameraFitExpr(bbox, padFraction = 0.12) {
 }
 
 /** Restore the camera to an explicit center/zoom. */
-export function buildCameraSetExpr(center, zoom) {
-  const x = Number(center?.x), y = Number(center?.y), z = Number(zoom);
+export function buildCameraSetExpr(center, zoomToApply) {
+  const x = Number(center?.x), y = Number(center?.y), z = Number(zoomToApply);
   if (![x, y, z].every(Number.isFinite)) throw new Error('buildCameraSetExpr: center/zoom must be finite numbers');
   return `(() => {
     try {
-      const obj = ds.store.objects.entries().next().value?.[1];
+      const ds = window.ds;
+      const obj = ds && ds.store && ds.store.objects && ds.store.objects.entries().next().value?.[1];
       if (!obj) return { __error: 'board has no objects to reach the navigation service' };
       const nav = obj.objectBoundsService.visibilityService.navigationService;
-      nav.setViewportCenter(${x}, ${y});
-      nav.zoom = ${z};
-      return { ok: true };
+      nav.setViewportCenter(${x}, ${y});${cameraZoomWrite(String(z))}
+      return { ok: true, zoom: nav.zoom };
     } catch (e) { return { __error: String(e) }; }
   })()`;
 }
