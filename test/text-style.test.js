@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildStyleExtras, pxToTextScale, segmentsToHtml, segmentsToSlateNodes } from '../src/text-style.js';
+import { buildStyleExtras, pxToTextScale, resolveUpdateStyleExtras, segmentsToHtml, segmentsToSlateNodes } from '../src/text-style.js';
 import { ValidationError } from '../src/validate.js';
 
 describe('pxToTextScale', () => {
@@ -15,6 +15,58 @@ describe('pxToTextScale', () => {
     assert.throws(() => pxToTextScale(NaN), ValidationError);
   });
 });
+
+describe('resolveUpdateStyleExtras: kind-aware fontSize mapping (issue #2)', () => {
+  test('simple-text: fontSize converts to textScale (base 14), never a fontSize field', () => {
+    const r = resolveUpdateStyleExtras('simple-text', { fontSize: 22 });
+    assert.deepEqual(r.extras, { textScale: 22 / 14 });
+    assert.deepEqual(r.clearFields, ['fontSize']);
+  });
+
+  test('simple-text: explicit textScale wins over fontSize (parity with batch_create)', () => {
+    const r = resolveUpdateStyleExtras('simple-text', { fontSize: 22, textScale: 2 });
+    assert.deepEqual(r.extras, { textScale: 2 });
+    assert.deepEqual(r.clearFields, ['fontSize']);
+  });
+
+  test('simple-text: heals a stale fontSize field even when fontSize is not passed', () => {
+    const r = resolveUpdateStyleExtras('simple-text', { textColor: '#f20606' });
+    assert.deepEqual(r.extras, { textColor: { color: 0xf20606, opacity: 1 } });
+    assert.deepEqual(r.clearFields, ['fontSize']);
+  });
+
+  test('simple-text: no style opts at all still requests the heal', () => {
+    const r = resolveUpdateStyleExtras('simple-text', {});
+    assert.deepEqual(r.extras, {});
+    assert.deepEqual(r.clearFields, ['fontSize']);
+  });
+
+  test('sticker: fontSize rejected (parity with batch_create)', () => {
+    assert.throws(
+      () => resolveUpdateStyleExtras('sticker', { fontSize: 20 }),
+      /fontSize is not supported for stickers/
+    );
+  });
+
+  test('shape: fontSize stays an absolute native field, nothing cleared', () => {
+    const r = resolveUpdateStyleExtras('shape', { fontSize: 22 });
+    assert.deepEqual(r.extras, { fontSize: 22 });
+    assert.deepEqual(r.clearFields, []);
+  });
+
+  test('arrow: fontSize stays an absolute native field', () => {
+    const r = resolveUpdateStyleExtras('arrow', { fontSize: 22 });
+    assert.deepEqual(r.extras, { fontSize: 22 });
+    assert.deepEqual(r.clearFields, []);
+  });
+
+  test('unknown kind: legacy passthrough (no kind info → old behavior)', () => {
+    const r = resolveUpdateStyleExtras(null, { fontSize: 22 });
+    assert.deepEqual(r.extras, { fontSize: 22 });
+    assert.deepEqual(r.clearFields, []);
+  });
+});
+
 
 describe('buildStyleExtras', () => {
   test('empty options → empty object (back-compat: no fields written)', () => {

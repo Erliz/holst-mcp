@@ -138,3 +138,30 @@ export function buildStyleExtras(opts = {}) {
   if (opts.textRotated !== undefined) extras.textRotated = Boolean(opts.textRotated);
   return extras;
 }
+
+/**
+ * Kind-aware style extras for update_text (issue #2). The object kinds store
+ * typography differently: shape/arrow carry a native absolute `fontSize` field,
+ * while simple-text/sticker only have `textScale` (base 14). Passing `fontSize`
+ * through verbatim for simple-text writes an alien field — older app builds
+ * multiplied it with textScale ("relative multiplier" symptom), newer builds
+ * ignore it (silent no-op). Same mapping as the create paths: px → textScale,
+ * explicit textScale wins; stickers have no verified px base → reject.
+ * Returns { extras, clearFields }: for simple-text the stale `fontSize` field
+ * (planted by the pre-fix update_text) is always cleared to heal old boards.
+ */
+export function resolveUpdateStyleExtras(kind, opts = {}) {
+  if (kind === 'simple-text') {
+    const { fontSize, ...rest } = opts;
+    const mapped = {
+      ...rest,
+      textScale: opts.textScale !== undefined ? opts.textScale
+        : (fontSize !== undefined ? pxToTextScale(fontSize) : undefined),
+    };
+    return { extras: buildStyleExtras(mapped), clearFields: ['fontSize'] };
+  }
+  if (kind === 'sticker' && opts.fontSize !== undefined) {
+    throw new ValidationError('fontSize is not supported for stickers — use textScale (no verified px base)');
+  }
+  return { extras: buildStyleExtras(opts), clearFields: [] };
+}
