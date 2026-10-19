@@ -47,16 +47,26 @@ description: Конвейер issues — триаж бэклога и довед
 ## Пайплайн прогона
 
 1. Прочитай issue целиком: тело + все комментарии
-2. Создай worktree (superpowers:using-git-worktrees) — не работай в основной копии
-3. **bug** → superpowers:systematic-debugging: найди root cause, не лечи симптом. Воспроизведи через MCP-инструменты holst на живой доске. Не воспроизводится после честных попыток → PR не открываешь; комментарий с находками в issue и label `needs-info`
-4. **enhancement** → superpowers:brainstorming: мини-дизайн в чате, явное «да» владельца до кода
-5. Реализация через superpowers:test-driven-development; `npm test` — все зелёные
-6. Ветка `issue-N-<короткий-slug>` от main; атомарные коммиты
-7. Запушь ветку: `git push -u origin issue-N-<slug>`, затем PR: `gh pr create -R Erliz/holst-mcp --base main --head issue-N-<slug>`:
+2. Предполётная синхронизация: `git fetch origin`; основная копка чистая (`git status --porcelain` пуст) → `git pull`; грязная → не трогай её, базируй ветку от `origin/main`
+3. Создай worktree (superpowers:using-git-worktrees) — не работай в основной копии
+4. **bug** → superpowers:systematic-debugging: найди root cause, не лечи симптом. Воспроизведи через MCP-инструменты holst на живой доске. Бюджет репро: до 3 конфигураций из issue + зафиксируй версию приложения. Исчерпан без успеха → PR не открываешь; комментарий с находками в issue и label `needs-info`
+5. **enhancement** → superpowers:brainstorming: мини-дизайн в чате, явное «да» владельца до кода
+6. Реализация через superpowers:test-driven-development; `npm test` — все зелёные
+7. Верификация на живой доске — по данным: bbox, positions, DOM-ректы через CDP. Скриншоты доказательством не считаются (модель их не видит); если снял — сохрани в файл и укажи путь в докладе
+8. Ветка `issue-N-<короткий-slug>` от main; атомарные коммиты
+9. Запушь ветку: `git push -u origin issue-N-<slug>`, затем PR: `gh pr create -R Erliz/holst-mcp --base main --head issue-N-<slug>`:
    - тело обязательно содержит `Closes #N`
    - для бага — root cause одним абзацем
    - как проверено: какие тесты, что проверено на живой доске
-8. Доложи владельцу ссылку на PR
+10. Дождись CI своего PR: `gh pr checks <PR> -R Erliz/holst-mcp --watch` (лимит ~5 минут). Зелёный → доклад со ссылкой; красный → разбери лог, почини, запушь снова
+11. Доложи владельцу ссылку на PR
+
+## Пост-мерж (после «смержил» от владельца)
+
+1. Сверь факт: `gh pr view <PR> -R Erliz/holst-mcp` → state `MERGED`; не верь предположениям
+2. Удали worktree и локальную ветку (remote-ветку удаляет авто-настройка репо)
+3. Верни сессию в основную копку; `git pull` там (если чистая)
+4. Доклад: что убрано, текущее состояние бэклога
 
 ## Стоп-краны
 
