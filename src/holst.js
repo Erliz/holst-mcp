@@ -25,7 +25,7 @@ import {
 } from './validate.js';
 import { assertBoardReadable, assertBoardWritable, assertNotReadOnly, limitDump } from './policy.js';
 import { buildBatchPlan } from './batch.js';
-import { buildArrowTexts } from './arrow-text.js';
+import { buildArrowTexts, arrowLabelMatches } from './arrow-text.js';
 import { buildStyleExtras, pxToTextScale, buildSegments, segmentsToSlateNodes, resolveUpdateStyleExtras } from './text-style.js';
 import { docTextMatches } from './text-match.js';
 import {
@@ -40,6 +40,7 @@ import {
   buildBatchCreationExpr,
   buildBatchArrowsExpr,
   buildBatchTextWriteExpr,
+  buildArrowLabelsStateExpr,
   buildDeleteObjectsExpr,
 } from './eval-scripts.js';
 
@@ -107,6 +108,48 @@ async function updateArrowText(session, objectId, text) {
   );
   if (result?.__error) throw new Error(result.__error);
   return result;
+}
+
+/**
+ * Issue #3: verify on-arrow labels reached the app's RENDER layer and heal
+ * the ones that did not. Creation-time `texts` always land in yDoc, but a
+ * regressed/racing app build may never mount them — batch_create used to
+ * report ok:true with empty textFailedRefs. Ask the app's own
+ * getTextOnArrowString what it actually mounted; each failure gets ONE
+ * post-mount rewrite (the update_text mechanism that rescued live boards),
+ * then a re-verify. Returns { [arrowId]: 'ok' | 'fail' | 'unknown' } —
+ * unknown = app build without the API (fail-open) or domain object absent
+ * (the mount-check phase owns that signal).
+ */
+export async function verifyArrowLabelsWithHeal(session, jobs, { healDelayMs = 1500 } = {}) {
+  const out = {};
+  if (!jobs.length) return out;
+  let states = await session.evaluate(buildArrowLabelsStateExpr(jobs.map((j) => j.id)));
+  if (!states || states.__error) states = {};
+  const pending = [];
+  for (const j of jobs) {
+    const st = states[j.id] || { missing: true };
+    if ('str' in st) out[j.id] = arrowLabelMatches(j.text, st.str) ? 'ok' : 'fail';
+    else if (st.error) out[j.id] = 'fail'; // API present but threw — heal may still fix it
+    else out[j.id] = 'unknown';            // apiMissing | missing
+    if (out[j.id] === 'fail') pending.push(j);
+  }
+  for (const j of pending) {
+    try {
+      await updateArrowText(session, j.id, j.text); // yDoc-verified rewrite
+      if (healDelayMs) await sleep(healDelayMs);
+      let re;
+      try {
+        re = await session.evaluate(buildArrowLabelsStateExpr([j.id]));
+      } catch { re = null; }
+      const st = !re || re.__error ? { apiMissing: true } : (re[j.id] || { apiMissing: true });
+      if ('str' in st) out[j.id] = arrowLabelMatches(j.text, st.str) ? 'ok' : 'fail';
+      else out[j.id] = 'ok'; // API unavailable after a yDoc-verified heal → trust the doc
+    } catch {
+      out[j.id] = 'fail'; // rewrite itself failed — the caller must know
+    }
+  }
+  return out;
 }
 
 /**
@@ -1352,6 +1395,18 @@ export async function batchCreate(boardId, entries, options = {}) {
       }
     }
 
+    // Phase 3b (issue #3): verify on-arrow labels reached the RENDER layer
+    // and heal misses with one post-mount rewrite. Creation-time `texts`
+    // always land in yDoc, but a regressed/racing app build may never mount
+    // them — without this pass batch reported ok:true with empty
+    // textFailedRefs while labels were missing on the board.
+    const arrowTextJobs = plan.arrows
+      .map((a, ai) => ({ ref: a.ref, id: arrowIds[ai], text: a.text }))
+      .filter((j) => j.id && j.text !== undefined && String(j.text) !== '');
+    const arrowTextStates = arrowTextJobs.length
+      ? await verifyArrowLabelsWithHeal(session, arrowTextJobs)
+      : {};
+
     // Assemble result
     const createdMap = {};
     const textFailedRefs = [];
@@ -1366,11 +1421,15 @@ export async function batchCreate(boardId, entries, options = {}) {
       if (wr && !wr.ok) textFailedRefs.push(c.ref);
     });
     plan.arrows.forEach((a, ai) => {
+      const state = arrowTextStates[arrowIds[ai]]; // undefined = arrow without label
       createdMap[a.ref] = {
         id: arrowIds[ai],
         type: 'arrow',
         mounted: mountedMap[arrowIds[ai]] ?? false,
+        // null = no label or app build without the render API (cannot verify)
+        textOk: state === 'ok' ? true : state === 'fail' ? false : null,
       };
+      if (state === 'fail') textFailedRefs.push(a.ref);
     });
     const unmountedRefs = byIndex.filter((c) => !mountedMap[c.id]).map((c) => c.ref);
     return {

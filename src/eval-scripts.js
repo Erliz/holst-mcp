@@ -406,6 +406,30 @@ export function buildBatchArrowsExpr(byIndex, arrows, arrowsBehind) {
   })()`;
 }
 
+/**
+ * Read the render-layer state of on-arrow labels (issue #3 verify pass):
+ * for each arrow id, ask the app's own API what label it has mounted.
+ * Per id returns { str } | { apiMissing } | { missing } | { error } —
+ * apiMissing = app build without the API (fail-open at the call site).
+ */
+export function buildArrowLabelsStateExpr(ids) {
+  return `(() => {
+    try {
+      const ids = ${JSON.stringify(ids)};
+      const out = {};
+      for (const id of ids) {
+        const o = window.ds && window.ds.store && window.ds.store.objects && window.ds.store.objects.get
+          ? window.ds.store.objects.get(id) : null;
+        if (!o) { out[id] = { missing: true }; continue; }
+        if (typeof o.getTextOnArrowString !== 'function') { out[id] = { apiMissing: true }; continue; }
+        try { out[id] = { str: o.getTextOnArrowString() ?? null }; }
+        catch (e) { out[id] = { error: String(e) }; }
+      }
+      return out;
+    } catch (e) { return { __error: String(e) }; }
+  })()`;
+}
+
 /** Delete many objects in ONE page pass (native objectsService.remove loop). */
 export function buildDeleteObjectsExpr(ids) {
   return `(async () => {
