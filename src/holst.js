@@ -527,10 +527,48 @@ export async function addSticker(boardId, { text, x, y, width = 192, height = 19
   }
 }
 
-/**
- * Update text on an existing sticker / shape / simple-text object.
- * Looks up the object's documentId and rewrites that document.
- */
+// Post-reload boot/sync window (issue #6): a freshly reloaded page serves an
+// absent or EMPTY yDoc for ~0.4-1.1s+ (measured live; scales with board size
+// and network), so a just-created object is transiently not addressable —
+// a single kind probe reports a false 'object not found' while the object
+// exists server-side and a retry succeeds. Bounded settle around the probe:
+// retry empty (null) and boot-TypeError replies, fail fast on anything else,
+// and report an accurate error only after the budget is spent.
+export const KIND_SETTLE_ATTEMPTS = 6;
+export const KIND_SETTLE_DELAY_MS = 1000;
+const TRANSIENT_PAGE_BOOT_RE =
+  /TypeError|Cannot read propert|is not defined|undefined is not an object|yPersistence/;
+
+export async function probeKindWithSettle(
+  session,
+  objectId,
+  { attempts = KIND_SETTLE_ATTEMPTS, delayMs = KIND_SETTLE_DELAY_MS } = {}
+) {
+  let lastBootError = null;
+  for (let i = 0; ; i++) {
+    const kind = await session.evaluate(buildKindExpr(objectId));
+    if (kind && kind.__error) {
+      if (TRANSIENT_PAGE_BOOT_RE.test(kind.__error)) {
+        lastBootError = kind.__error; // page still booting — retry
+      } else {
+        throw new Error(kind.__error);
+      }
+    } else if (kind) {
+      return kind; // addressable — zero added latency on the happy path
+    }
+    if (i >= attempts) {
+      if (lastBootError) {
+        throw new Error(`page did not become ready after ${attempts} retries: ${lastBootError}`);
+      }
+      throw new Error(
+        `object not found: ${objectId} (yDoc stayed empty for ${attempts + 1} probes — ` +
+        'the page may still be syncing after a reload; retry if the id is freshly created)'
+      );
+    }
+    await new Promise((r) => setTimeout(r, delayMs));
+  }
+}
+
 /**
  * Update text on an existing sticker / shape / simple-text object.
  * Optional opts: fontSize, textScale, textColor, textBackgroundColor,
@@ -554,10 +592,11 @@ export async function updateText(boardId, objectId, text, opts = {}) {
   try {
     // Object kind first — style fields are kind-dependent (issue #2):
     // simple-text stores px sizes as textScale (base 14), never a fontSize field.
-    const kind = await session.evaluate(
-      buildKindExpr(objectId)
-    );
-    if (kind && kind.__error) throw new Error(kind.__error);
+    // The probe settles through the post-reload boot/sync window (issue #6):
+    // tools that end with a self-heal reload hand over a page whose yDoc is
+    // briefly empty, which used to surface as a transient false
+    // 'object not found' on freshly created objects.
+    const kind = await probeKindWithSettle(session, objectId);
     const { extras: styleExtras, clearFields } = resolveUpdateStyleExtras(kind, opts);
     // Style fields — plain writes, independent of the text pipeline.
     if (Object.keys(styleExtras).length || clearFields.length) {
