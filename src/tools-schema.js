@@ -7,7 +7,7 @@ import {
   whoAmI, doctor, listBoards, batchCreate, getBoardContent, getBoardSummary,
   searchBoardText, addSticker, updateText, deleteObject, deleteObjects,
   addShape, addSimpleText, addArrow, moveObject, resizeObject, setColor,
-  addFrame, addStamp, screenshot } from './holst.js';
+  addFrame, addStamp, screenshot, measureText } from './holst.js';
 import { getReference } from './reference.js';
 import { SHAPE_TYPES, STROKE_STYLES } from './validate.js';
 
@@ -114,6 +114,27 @@ export const TOOLS = [
         query: { type: 'string', description: 'Substring to search (case-insensitive)' },
       },
       required: ['boardId', 'query'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'holst_measure_text',
+    description:
+      'Measure how text will RENDER before creating objects — real metrics from the board app\'s own loaded fonts (SourceCodePro ~0.72em/char, NOT the nominal 0.6; bold caps ~0.9em). ' +
+      'Returns { widthPx, heightPx, lineHeightPx, lines: [{ text, widthPx }] }; multiline \\n measured per line, widthPx = widest line. ' +
+      'Pure read — nothing is created, works on read-only boards. Use it to size shapes/chips/labels in one pass: measure first, then create with width ≥ widthPx + padding.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        boardId: { type: 'string', description: 'UUID board id — the page whose loaded fonts are used' },
+        text: { type: 'string', description: 'Text to measure (\\n = new line)' },
+        fontSize: { type: 'number', description: 'Font size in px (same unit as add_* typography)' },
+        fontFamily: { type: 'string', description: 'REQUIRED. Font token resolved against the app\'s loaded fonts: SourceCodePro (mono), Inter, Roboto, Montserrat, EBGaramond, Merriweather, TimesNewRoman, Caveat, ShantellSans… Unknown token → error listing available families' },
+        bold: { type: 'boolean', description: 'Measure the 700 weight' },
+        italic: { type: 'boolean', description: 'Measure the italic style' },
+        letterSpacing: { type: 'number', description: 'Letter spacing in px (float, -10..100)' },
+      },
+      required: ['boardId', 'text', 'fontSize', 'fontFamily'],
       additionalProperties: false,
     },
   },
@@ -429,6 +450,7 @@ export const DISPATCH = {
   holst_get_board_content: (args) => getBoardContent(args.boardId, { bbox: args.bbox, positionsOnly: args.positionsOnly }),
   holst_get_board_summary: (args) => getBoardSummary(args.boardId),
   holst_search_text: (args) => searchBoardText(args.boardId, args.query),
+  holst_measure_text: (args) => measureText(args.boardId, args),
   holst_add_sticker: (args) => addSticker(args.boardId, args),
   holst_update_text: (args) => updateText(args.boardId, args.objectId, args.text, args),
   holst_delete_object: (args) => deleteObject(args.boardId, args.objectId),

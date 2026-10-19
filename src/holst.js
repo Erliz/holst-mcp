@@ -43,6 +43,7 @@ import {
   buildBatchTextWriteExpr,
   buildArrowLabelsStateExpr,
   buildDeleteObjectsExpr,
+  buildMeasureTextExpr,
 } from './eval-scripts.js';
 
 const COORD = { min: -1e7, max: 1e7 };
@@ -473,6 +474,45 @@ export async function searchBoardText(boardId, query) {
     }
   }
   return matches;
+}
+
+/**
+ * Measure how text will RENDER with the board app's own fonts (issue #8):
+ * canvas measureText inside the board page — the page holds the exact font
+ * files the renderer uses, and measureText runs the same shaping engine.
+ * Pure read (works on read-only boards); nothing is created or mutated.
+ * Returns { fontFamily (real CSS name), widthPx, heightPx, lineHeightPx,
+ * lines: [{ text, widthPx }], method }.
+ */
+export async function measureTextWithSession(session, opts) {
+  const r = await session.evaluate(buildMeasureTextExpr(opts), { awaitPromise: true });
+  if (r && r.__error) throw new Error(r.__error);
+  return r;
+}
+
+export async function measureText(boardId, opts = {}) {
+  assertBoardId(boardId);
+  assertBoardReadable(boardId);
+  const text = assertText(opts.text, 'text');
+  if (text === '') throw new ValidationError('text must be non-empty');
+  const fontSize = num(opts.fontSize, 'fontSize', { min: 1, max: 512 });
+  const fontFamily = safeToken(opts.fontFamily, 'fontFamily');
+  const letterSpacing = opts.letterSpacing === undefined
+    ? undefined
+    : num(opts.letterSpacing, 'letterSpacing', { min: -10, max: 100 });
+  const session = await getBoardSession(boardId);
+  try {
+    return await measureTextWithSession(session, {
+      text,
+      fontSize,
+      fontFamily,
+      bold: opts.bold,
+      italic: opts.italic,
+      letterSpacing,
+    });
+  } finally {
+    releaseSession(session);
+  }
 }
 
 /**

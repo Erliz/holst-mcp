@@ -1,6 +1,8 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildMeasureTextExpr } from '../src/eval-scripts.js';
+import { measureText, measureTextWithSession } from '../src/holst.js';
+import { TOOLS, DISPATCH } from '../src/tools-schema.js';
 
 // L1: the measure script is composed as a pure builder — compile and
 // injection guards mirror eval-scripts.test.js (new Function parses with
@@ -113,5 +115,72 @@ describe('buildMeasureTextExpr (L2 fake page)', () => {
     const old = fakePage({ supportLetterSpacing: false });
     const r2 = await evalInPage(buildMeasureTextExpr({ text: 'ab', fontSize: 14, fontFamily: 'Inter', letterSpacing: 2 }), old);
     assert.match(r2.__error, /letterSpacing/);
+  });
+});
+
+// L2 orchestration: the session-level wrapper must evaluate the async IIFE
+// with awaitPromise (otherwise CDP returns the Promise object, not metrics)
+// and surface page __error as a thrown Error.
+
+function makeSession(page) {
+  const calls = { evaluate: [] };
+  return {
+    session: {
+      async evaluate(expr, opts) {
+        calls.evaluate.push({ expr, opts });
+        return evalInPage(expr, page);
+      },
+    },
+    calls,
+  };
+}
+
+describe('measureTextWithSession (stub session)', () => {
+  test('evaluates with awaitPromise:true and returns the page metrics', async () => {
+    const page = fakePage();
+    const { session, calls } = makeSession(page);
+    const r = await measureTextWithSession(session, { text: 'release v1.2.3', fontSize: 17, fontFamily: 'SourceCodePro' });
+    assert.equal(r.ok, true);
+    assert.equal(r.fontFamily, 'Source Code Pro');
+    assert.equal(r.widthPx, 'release v1.2.3'.length * 17 * MONO_EM);
+    assert.deepEqual(calls.evaluate[0].opts, { awaitPromise: true });
+  });
+
+  test('page __error surfaces as a thrown Error (unknown family lists available)', async () => {
+    const page = fakePage();
+    const { session } = makeSession(page);
+    await assert.rejects(
+      () => measureTextWithSession(session, { text: 'x', fontSize: 14, fontFamily: 'Nope' }),
+      /unknown fontFamily "Nope"[\s\S]*Inter/,
+    );
+  });
+});
+
+describe('measureText (validation, no session acquired)', () => {
+  const ok = { boardId: '00000000-0000-4000-8000-000000000000', text: 'hi', fontSize: 17, fontFamily: 'Inter' };
+  test('empty text rejected', async () => {
+    await assert.rejects(() => measureText(ok.boardId, { ...ok, text: '' }), /non-empty/);
+  });
+  test('missing / non-number fontSize rejected', async () => {
+    await assert.rejects(() => measureText(ok.boardId, { ...ok, fontSize: undefined }), /fontSize/);
+    await assert.rejects(() => measureText(ok.boardId, { ...ok, fontSize: 'big' }), /fontSize/);
+  });
+  test('injection payload in fontFamily rejected (token charset)', async () => {
+    await assert.rejects(() => measureText(ok.boardId, { ...ok, fontFamily: 'Inter"; evil()' }), /fontFamily/);
+  });
+  test('letterSpacing out of sane range rejected', async () => {
+    await assert.rejects(() => measureText(ok.boardId, { ...ok, letterSpacing: 500 }), /letterSpacing/);
+  });
+  test('bad boardId rejected before anything else', async () => {
+    await assert.rejects(() => measureText('not-a-uuid', ok), /boardId/);
+  });
+});
+
+describe('holst_measure_text tool declaration', () => {
+  test('declared with boardId/text/fontSize/fontFamily required — fontFamily is explicit, no silent default', () => {
+    const tool = TOOLS.find((t) => t.name === 'holst_measure_text');
+    assert.ok(tool, 'tool must be declared');
+    assert.deepEqual([...tool.inputSchema.required].sort(), ['boardId', 'fontFamily', 'fontSize', 'text']);
+    assert.equal(typeof DISPATCH.holst_measure_text, 'function');
   });
 });
