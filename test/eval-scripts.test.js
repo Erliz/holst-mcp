@@ -8,6 +8,7 @@ import {
   buildBatchArrowsExpr,
   buildBatchTextWriteExpr,
   buildStyleFieldsExpr,
+  buildNativeStyleUpdateExpr,
   buildKindExpr,
   buildTouchUpdatedExpr,
   buildAddSimpleTextExpr,
@@ -83,6 +84,20 @@ describe('L1: batch exprs', () => {
 describe('L1: update_text path', () => {
   test('buildStyleFieldsExpr embeds objectId escaped', () => {
     const expr = buildStyleFieldsExpr("x'}; evil()", { fontSize: 36 });
+    compiles(expr);
+    noPlaceholders(expr);
+    assert.ok(expr.includes(JSON.stringify("x'}; evil()")));
+  });
+
+  test('buildStyleFieldsExpr with deleteFields compiles and embeds the list escaped', () => {
+    const expr = buildStyleFieldsExpr("a'", {}, ["font'", 'Size']);
+    compiles(expr);
+    noPlaceholders(expr);
+    assert.ok(expr.includes(JSON.stringify(["font'", 'Size'])));
+  });
+
+  test('buildNativeStyleUpdateExpr compiles and embeds ids escaped', () => {
+    const expr = buildNativeStyleUpdateExpr("x'}; evil()", { textScale: 1.5 }, ["font'"]);
     compiles(expr);
     noPlaceholders(expr);
     assert.ok(expr.includes(JSON.stringify("x'}; evil()")));

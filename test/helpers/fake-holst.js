@@ -45,6 +45,7 @@ export function createState() {
   const documentsMap = new Map(); // docId → FakeYText
   const created = []; // creation expr outputs: { ref, id, documentId }
   const createdDocs = [];
+  const svcCalls = []; // objectsService.update calls recorded for assertions
 
   const sds = {
     getEditor: () => null, // force the not-mounted write path
@@ -69,6 +70,19 @@ export function createState() {
     },
   };
 
+  // The app's own update path (mirrors ds.store.objectBuilder.getApp()). Only
+  // `update` is faked — no `remove`, so delete exprs keep taking their raw
+  // fallback in tests exactly as before.
+  const app = {
+    objectsService: {
+      update: async (id, patch) => {
+        svcCalls.push({ id, patch });
+        const m = objectsMap.get(id);
+        if (m) for (const k of Object.keys(patch)) m.set(k, patch[k]);
+      },
+    },
+  };
+
   const yDoc = {
     getMap: (name) => (name === 'objects' ? objectsMap : documentsMap),
     transact: (fn) => fn(),
@@ -84,7 +98,7 @@ export function createState() {
         yPersistence: { yDoc },
         store: {
           objects: { has: (id) => objectsMap.has(id), get: (id) => objectsMap.get(id) },
-          objectBuilder: { singleDocumentStore: sds },
+          objectBuilder: { singleDocumentStore: sds, getApp: () => app },
         },
       },
       Yjs: { Map: FakeYMap, Text: FakeYText },
@@ -97,6 +111,7 @@ export function createState() {
       rendered: t.toDelta().map((d) => String(d.insert)).join(''),
     })),
     byIndex: () => created,
+    svcCalls,
     setDoc: (docId, markup) => {
       const t = new FakeYText(markup.replace(/<[^>]*>/g, ''));
       t.ops = [{ insert: { toString: () => markup } }];

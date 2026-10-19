@@ -159,19 +159,73 @@ export function buildTouchUpdatedExpr(objectId) {
   return `(() => { try { const o = window.ds.yPersistence.yDoc.getMap('objects').get(${JSON.stringify(objectId)}); if (o && o.set) o.set('updated', { a: 0, t: Date.now() }); return true; } catch (e) { return false; } })()`;
 }
 
-/** Apply typography extras (fontSize/textColor/…) as plain object fields. */
-export function buildStyleFieldsExpr(objectId, styleExtras) {
+/** Apply typography extras (fontSize/textColor/…) as plain object fields.
+ * deleteFields (optional) removes stale fields in the same transaction — used
+ * to heal the alien `fontSize` field the pre-fix update_text planted on
+ * simple-text objects (issue #2). */
+export function buildStyleFieldsExpr(objectId, styleExtras, deleteFields = []) {
   return `(() => {
     try {
       const yDoc = window.ds.yPersistence.yDoc;
       const obj = yDoc.getMap('objects').get(${JSON.stringify(objectId)});
       if (!obj || !obj.set) return { __error: 'object not found' };
       const extras = ${JSON.stringify(styleExtras)};
+      const clear = ${JSON.stringify(deleteFields)};
       yDoc.transact(() => {
         for (const k of Object.keys(extras)) obj.set(k, extras[k]);
+        for (const k of clear) obj.delete(k);
         obj.set('updated', { a: 0, t: Date.now() });
       });
-      return { ok: true, styled: Object.keys(extras) };
+      return { ok: true, styled: Object.keys(extras), ${deleteFields.length ? 'cleared: clear,' : ''} };
+    } catch (e) { return { __error: String(e) }; }
+  })()`;
+}
+
+/**
+ * Style update through the app's own objectsService.update — the only path
+ * that re-renders the MOUNTED editor live (issue #2: raw yDoc textScale
+ * writes persist but the mounted view keeps the old scale until reload,
+ * verified on app 0.0.7). The service applies domain+render immediately but
+ * persists to yDoc with a debounce, so the script polls the doc until the
+ * expected fields land (bounded wait). Service patches cannot delete fields,
+ * so the heal of alien fields (pre-fix `fontSize` on simple-text) still runs
+ * as a raw transaction. Returns { native: false } when the service is missing
+ * (older builds) — callers fall back to buildStyleFieldsExpr.
+ */
+export function buildNativeStyleUpdateExpr(objectId, styleExtras = {}, deleteFields = []) {
+  return `(async () => {
+    try {
+      const ds = window.ds;
+      const app = ds && ds.store && ds.store.objectBuilder && ds.store.objectBuilder.getApp
+        && ds.store.objectBuilder.getApp();
+      const svc = app && app.objectsService;
+      if (!svc || typeof svc.update !== 'function') return { native: false };
+      const extras = ${JSON.stringify(styleExtras)};
+      if (Object.keys(extras).length) await svc.update(${JSON.stringify(objectId)}, extras);
+      const yDoc = ds.yPersistence.yDoc;
+      const obj = yDoc.getMap('objects').get(${JSON.stringify(objectId)});
+      const clear = ${JSON.stringify(deleteFields)};
+      const cleared = [];
+      if (obj && obj.delete && clear.length) {
+        yDoc.transact(() => {
+          for (const k of clear) if (obj.has(k)) { obj.delete(k); cleared.push(k); }
+        });
+      }
+      // wait (bounded) for the debounced yDoc persistence to reflect the patch
+      const matches = () => {
+        const o = yDoc.getMap('objects').get(${JSON.stringify(objectId)});
+        if (!o || !o.get) return false;
+        for (const k of Object.keys(extras)) {
+          if (JSON.stringify(o.get(k)) !== JSON.stringify(extras[k])) return false;
+        }
+        for (const k of clear) if (o.get(k) !== undefined) return false;
+        return true;
+      };
+      const deadline = Date.now() + 1500;
+      while (!matches() && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return { ok: true, native: true, styled: Object.keys(extras), cleared, converged: matches() };
     } catch (e) { return { __error: String(e) }; }
   })()`;
 }

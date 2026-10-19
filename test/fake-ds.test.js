@@ -7,6 +7,7 @@ import {
   buildBatchTextWriteExpr,
   buildBoardContentExpr,
   buildStyleFieldsExpr,
+  buildNativeStyleUpdateExpr,
   buildKindExpr,
 } from '../src/eval-scripts.js';
 import { segmentsToSlateNodes } from '../src/text-style.js';
@@ -200,5 +201,94 @@ describe('L2: read path + style fields (original)', () => {
     }]));
     const id = state.byIndex()[0].id;
     assert.equal((await runExpr(buildKindExpr(id), state)).result, 'shape');
+  });
+
+  test('styleFields heals a stale fontSize field on simple-text (issue #2)', async () => {
+    let state = await runExpr(buildBatchCreationExpr([{
+      kind: 'simple-text', ref: 't', x: 0, y: 0, hasDocument: true, text: 'x', textScale: 24 / 14,
+    }]));
+    const id = state.byIndex()[0].id;
+    // the pre-fix update_text wrote a shape-style fontSize field onto simple-text
+    state = await runExpr(buildStyleFieldsExpr(id, { fontSize: 22 }), state);
+    assert.equal(state.objectsList()[0].fields.fontSize, 22);
+    // fixed update path: absolute px → textScale + clear of the alien field
+    state = await runExpr(buildStyleFieldsExpr(id, { textScale: 22 / 14 }, ['fontSize']), state);
+    const f = state.objectsList()[0].fields;
+    assert.equal(f.fontSize, undefined);
+    assert.equal(f.textScale, 22 / 14);
+    assert.deepEqual(state.result.cleared, ['fontSize']);
+  });
+
+  test('styleFields with no deleteFields keeps the old contract', async () => {
+    let state = await runExpr(buildBatchCreationExpr([{
+      kind: 'simple-text', ref: 't', x: 0, y: 0, hasDocument: true, text: 'x',
+    }]));
+    const id = state.byIndex()[0].id;
+    state = await runExpr(buildStyleFieldsExpr(id, { textScale: 1.5 }), state);
+    assert.equal(state.objectsList()[0].fields.textScale, 1.5);
+    assert.equal(state.result.cleared, undefined);
+  });
+
+  test('nativeStyleUpdate styles via objectsService.update and heals stale fields (issue #2)', async () => {
+    let state = await runExpr(buildBatchCreationExpr([{
+      kind: 'simple-text', ref: 't', x: 0, y: 0, hasDocument: true, text: 'x', textScale: 24 / 14,
+    }]));
+    const id = state.byIndex()[0].id;
+    // pre-fix update_text planted the alien fontSize field
+    state = await runExpr(buildStyleFieldsExpr(id, { fontSize: 22 }), state);
+    state.svcCalls.length = 0;
+
+    state = await runExpr(buildNativeStyleUpdateExpr(id, { textScale: 22 / 14 }, ['fontSize']), state);
+    assert.equal(state.result.native, true);
+    assert.equal(state.result.cleared.length, 1);
+    assert.equal(state.result.converged, true);
+    // the app path carried the style patch…
+    assert.deepEqual(state.svcCalls, [{ id, patch: { textScale: 22 / 14 } }]);
+    // …and the raw heal removed the alien field
+    const f = state.objectsList()[0].fields;
+    assert.equal(f.fontSize, undefined);
+    assert.equal(f.textScale, 22 / 14);
+  });
+
+  test('nativeStyleUpdate without extras only heals (no service call)', async () => {
+    let state = await runExpr(buildBatchCreationExpr([{
+      kind: 'simple-text', ref: 't', x: 0, y: 0, hasDocument: true, text: 'x',
+    }]));
+    const id = state.byIndex()[0].id;
+    state = await runExpr(buildStyleFieldsExpr(id, { fontSize: 22 }), state);
+    state.svcCalls.length = 0;
+    state = await runExpr(buildNativeStyleUpdateExpr(id, {}, ['fontSize']), state);
+    assert.equal(state.result.native, true);
+    assert.equal(state.svcCalls.length, 0);
+    assert.equal(state.objectsList()[0].fields.fontSize, undefined);
+  });
+
+  test('nativeStyleUpdate reports native:false when the app service is unavailable', async () => {
+    const state = await runExpr(buildBatchCreationExpr([{
+      kind: 'simple-text', ref: 't', x: 0, y: 0, hasDocument: true, text: 'x',
+    }]));
+    const id = state.byIndex()[0].id;
+    delete state.window.ds.store.objectBuilder.getApp;
+    await runExpr(buildNativeStyleUpdateExpr(id, { textScale: 1.5 }), state);
+    assert.deepEqual(state.result, { native: false });
+  });
+
+  test('nativeStyleUpdate waits for debounced yDoc persistence (app save lag)', async () => {
+    const state = await runExpr(buildBatchCreationExpr([{
+      kind: 'simple-text', ref: 't', x: 0, y: 0, hasDocument: true, text: 'x',
+    }]));
+    const id = state.byIndex()[0].id;
+    const yobj = state.window.ds.yPersistence.yDoc.getMap('objects').get(id);
+    // mimic the real app: svc resolves immediately, the yDoc save lands 300ms later
+    state.window.ds.store.objectBuilder.getApp = () => ({ objectsService: {
+      update: async (id2, patch) => {
+        setTimeout(() => { for (const k of Object.keys(patch)) yobj.set(k, patch[k]); }, 300);
+      },
+    } });
+    const t0 = Date.now();
+    await runExpr(buildNativeStyleUpdateExpr(id, { textScale: 1.5 }), state);
+    assert.equal(state.result.converged, true);
+    assert.ok(Date.now() - t0 >= 290, 'must actually wait for persistence');
+    assert.equal(state.objectsList()[0].fields.textScale, 1.5);
   });
 });

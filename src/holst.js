@@ -26,7 +26,7 @@ import {
 import { assertBoardReadable, assertBoardWritable, assertNotReadOnly, limitDump } from './policy.js';
 import { buildBatchPlan } from './batch.js';
 import { buildArrowTexts } from './arrow-text.js';
-import { buildStyleExtras, pxToTextScale, buildSegments, segmentsToSlateNodes } from './text-style.js';
+import { buildStyleExtras, pxToTextScale, buildSegments, segmentsToSlateNodes, resolveUpdateStyleExtras } from './text-style.js';
 import { docTextMatches } from './text-match.js';
 import {
   NATIVE_WRITE_HELPER,
@@ -35,6 +35,7 @@ import {
   buildKindExpr,
   buildTouchUpdatedExpr,
   buildStyleFieldsExpr,
+  buildNativeStyleUpdateExpr,
   buildAddSimpleTextExpr,
   buildBatchCreationExpr,
   buildBatchArrowsExpr,
@@ -516,26 +517,41 @@ export async function updateText(boardId, objectId, text, opts = {}) {
   const runs = opts.runs;
   if (runs === undefined) text = assertNoMarkdown(assertText(text, 'text'));
   else text = '';
-  const styleExtras = buildStyleExtras(opts);
   const marks = {
     bold: opts.bold, italic: opts.italic, underline: opts.underline, strikethrough: opts.strikethrough,
   };
   const hasMarks = Object.values(marks).some((v) => v !== undefined);
   const session = await getBoardSession(boardId);
   try {
-    // Style fields first — plain writes, independent of the text pipeline.
-    if (Object.keys(styleExtras).length) {
-      const styled = await session.evaluate(
-        buildStyleFieldsExpr(objectId, styleExtras)
-      );
-      if (styled?.__error) throw new Error(styled.__error);
-    }
-
-    // Arrows carry label text as a plain `texts` field — no documentId.
+    // Object kind first — style fields are kind-dependent (issue #2):
+    // simple-text stores px sizes as textScale (base 14), never a fontSize field.
     const kind = await session.evaluate(
       buildKindExpr(objectId)
     );
     if (kind && kind.__error) throw new Error(kind.__error);
+    const { extras: styleExtras, clearFields } = resolveUpdateStyleExtras(kind, opts);
+    // Style fields — plain writes, independent of the text pipeline.
+    if (Object.keys(styleExtras).length || clearFields.length) {
+      let styled = null;
+      if (kind === 'simple-text') {
+        // Preferred: the app's own update path — the mounted editor re-renders
+        // live; raw yDoc style writes leave the view stale until reload (issue #2).
+        styled = await session.evaluate(
+          buildNativeStyleUpdateExpr(objectId, styleExtras, clearFields),
+          { awaitPromise: true }
+        );
+        if (styled?.__error) throw new Error(styled.__error);
+        if (styled?.native !== true) styled = null; // older build → raw fallback
+      }
+      if (!styled) {
+        styled = await session.evaluate(
+          buildStyleFieldsExpr(objectId, styleExtras, clearFields)
+        );
+        if (styled?.__error) throw new Error(styled.__error);
+      }
+    }
+
+    // Arrows carry label text as a plain `texts` field — no documentId.
     if (kind === 'arrow') return await updateArrowText(session, objectId, text);
 
     const doc = await resolveDoc(session, objectId);
