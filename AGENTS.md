@@ -29,4 +29,5 @@ Electron-приложению. Форк: `Erliz/holst-mcp` (issues и PR жив�
 
 - MCP-сервер `holst` подключён к локальному приложению (board id в `opencode.jsonc`)
 - Порядок при багах: systematic-debugging → root cause → TDD-фикс (тест на
-  fake-holst) → проверка на живой доске
+  fake-holst) → проверка на живой доске по данным (bbox/positions/DOM-ректы),
+  не по скриншотам
