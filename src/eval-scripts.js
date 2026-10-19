@@ -618,3 +618,106 @@ export function buildCameraSetExpr(center, zoomToApply) {
     } catch (e) { return { __error: String(e) }; }
   })()`;
 }
+
+// ─── Text measurement (issue #8) ────────────────────────────────────────────
+// Real rendered metrics differ from nominal ones (SourceCodePro measures
+// ~0.72em/char, not 0.6; bold caps ~0.9em) — sizing boxes by rule of thumb
+// overflows. The board page has the EXACT font files the renderer uses, and
+// canvas measureText runs the same shaping engine (HarfBuzz) as the canvas
+// text pipeline, so measuring in-page gives the renderer's own numbers.
+// Pure read: nothing is created, nothing is mutated.
+
+/**
+ * Measure how `text` renders with the given typography. Values must be
+ * PRE-VALIDATED (holst.js); fin() guards numbers as the last line of
+ * defense. The whole spec travels as ONE JSON-escaped literal — hostile
+ * text cannot break out of the script. Returns an async IIFE (the face is
+ * loaded via document.fonts.load before measuring) → evaluate with
+ * { awaitPromise: true }.
+ *
+ * No silent fallbacks (the rhombus lesson): an unknown fontFamily token
+ * errors WITH the available family list; a matched family that fails to
+ * load errors instead of measuring in a substitute font; letterSpacing
+ * on a build without ctx.letterSpacing errors instead of returning an
+ * unspaced width.
+ */
+export function buildMeasureTextExpr({ text, fontSize, fontFamily, bold = false, italic = false, letterSpacing } = {}) {
+  fontSize = fin(fontSize, 'fontSize');
+  const ls = letterSpacing === undefined || letterSpacing === null ? null : fin(letterSpacing, 'letterSpacing');
+  const spec = {
+    text: String(text),
+    fontSize,
+    fontFamily: String(fontFamily),
+    bold: Boolean(bold),
+    italic: Boolean(italic),
+    letterSpacing: ls,
+  };
+  return `(async () => {
+    try {
+      const spec = ${JSON.stringify(spec)};
+      const doc = window.document;
+      if (!doc || !doc.fonts || typeof doc.createElement !== 'function') {
+        return { __error: 'page has no document.fonts surface for measurement' };
+      }
+      // Token → real CSS family: the app registers faces like "Source Code
+      // Pro" while the MCP interface uses SourceCodePro. Compare with all
+      // non-alphanumerics stripped, case-insensitive.
+      const norm = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+      const want = norm(spec.fontFamily);
+      const families = [];
+      const seen = {};
+      for (const f of doc.fonts) {
+        const fam = f && f.family;
+        if (fam && !seen[fam]) { seen[fam] = true; families.push(fam); }
+      }
+      const hit = families.find((fam) => norm(fam) === want);
+      if (!hit) {
+        return { __error: 'unknown fontFamily "' + spec.fontFamily + '" — available: ' + families.sort().join(', ') };
+      }
+      const weight = spec.bold ? '700' : '400';
+      const style = spec.italic ? 'italic' : 'normal';
+      const fontSpec = style + ' ' + weight + ' ' + spec.fontSize + 'px "' + hit + '"';
+      // Force the face to actually load — canvas silently substitutes a
+      // fallback font for unloaded faces (wrong numbers, no error).
+      try { await doc.fonts.load(fontSpec, spec.text.slice(0, 100)); } catch (e) {}
+      if (typeof doc.fonts.check === 'function' && !doc.fonts.check(fontSpec)) {
+        return { __error: 'fontFamily "' + hit + '" matched but its face failed to load — refusing to measure in a substitute font' };
+      }
+      const canvas = doc.createElement('canvas');
+      const ctx = canvas.getContext && canvas.getContext('2d');
+      if (!ctx || typeof ctx.measureText !== 'function') {
+        return { __error: 'canvas 2d context unavailable for measurement' };
+      }
+      ctx.font = fontSpec;
+      if (spec.letterSpacing !== null) {
+        if (!('letterSpacing' in ctx)) {
+          return { __error: 'letterSpacing requested but ctx.letterSpacing is unavailable in this browser build — measure without letterSpacing' };
+        }
+        ctx.letterSpacing = spec.letterSpacing + 'px';
+      }
+      const lines = spec.text.split('\\n');
+      const metrics = lines.map((ln) => ctx.measureText(ln));
+      const ascent = metrics[0].fontBoundingBoxAscent;
+      const descent = metrics[0].fontBoundingBoxDescent;
+      if (typeof ascent !== 'number' || typeof descent !== 'number') {
+        return { __error: 'fontBoundingBox metrics unavailable in this browser build' };
+      }
+      const lineHeightPx = ascent + descent;
+      let widthPx = 0;
+      for (const m of metrics) if (m.width > widthPx) widthPx = m.width;
+      return {
+        ok: true,
+        fontFamily: hit,
+        fontSize: spec.fontSize,
+        bold: spec.bold,
+        italic: spec.italic,
+        letterSpacing: spec.letterSpacing,
+        widthPx,
+        lineHeightPx,
+        heightPx: lineHeightPx * lines.length,
+        lines: lines.map((ln, i) => ({ text: ln, widthPx: metrics[i].width })),
+        method: 'canvas-measure',
+      };
+    } catch (e) { return { __error: String(e) }; }
+  })()`;
+}
