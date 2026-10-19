@@ -467,7 +467,9 @@ export function buildDeleteObjectsExpr(ids) {
           report[id] = { ok: false, error: String(e).slice(0, 200) };
         }
       }
-      return { ok: Object.values(report).every((r) => r.ok), deleted: Object.values(report).filter((r) => r.ok).length, report };
+      // Counts (deleted/alreadyGone/failed) are computed by the orchestration
+      // layer from the merged per-chunk reports — one source of truth.
+      return { ok: Object.values(report).every((r) => r.ok), report };
     } catch (e) { return { __error: String(e) }; }
   })()`;
 }
