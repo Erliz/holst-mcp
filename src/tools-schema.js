@@ -127,7 +127,8 @@ export const TOOLS = [
       'Text objects support typography: fontSize, textColor (#RRGGBB ok), horizontalAlign, bold/italic/underline/strikethrough. ' +
       'options.arrowsBehind: true places arrows BELOW the nodes (design-system layering). ' +
       'ref is a local name (letters/digits/dash/_); arrows link refs instead of UUIDs; refs auto-generate when omitted. ' +
-      'Result maps each ref to { id, documentId, mounted, textOk } — verify with holst_get_board_summary afterwards. ' +
+      'Result maps each ref to { id, documentId, mounted, textOk } (arrows: textOk = on-arrow label verified in the render layer; null = no label) — verify with holst_get_board_summary afterwards. ' +
+      'textFailedRefs lists refs (objects AND arrows) whose text did not land — ok:false until you follow up with holst_update_text. ' +
       'Same fields/validation as the individual add_* tools; colors are #RRGGBB hex; frames accept backgroundStyle (fill / fill-border / border-only); top-left coords, batch limit 200.',
     inputSchema: {
       type: 'object',

@@ -9,6 +9,7 @@ import {
   buildStyleFieldsExpr,
   buildNativeStyleUpdateExpr,
   buildKindExpr,
+  buildArrowLabelsStateExpr,
 } from '../src/eval-scripts.js';
 import { segmentsToSlateNodes } from '../src/text-style.js';
 import { randomUUID } from 'node:crypto';
@@ -75,6 +76,58 @@ describe('L2: arrowsBehind layering (quadrant regression)', () => {
     assert.equal(arrow.fields.texts[0].text, 'link');
     assert.equal(arrow.fields.arrowheadEnd, 'none');
     assert.deepEqual(arrow.fields.strokeColor, { color: 0x2e5aa8, opacity: 1 });
+  });
+});
+
+describe('L2: arrow label verification expr (issue #3)', () => {
+  const makeLabeledArrow = async () => {
+    let state = await runExpr(buildBatchCreationExpr([{
+      kind: 'shape', ref: 'n1', x: 0, y: 0, width: 50, height: 50, shapeType: 'square',
+      fillColor: { color: 0xffffff, opacity: 1 }, strokeColor: { color: 0x202020, opacity: 1 },
+      strokeWidth: 2, fixedSize: true, hasDocument: false,
+    }]));
+    const byIndex = state.byIndex();
+    state = await runExpr(buildBatchArrowsExpr(byIndex, [{
+      arrowType: 'straight', strokeColor: 0x2e5aa8, strokeStyle: 'solid',
+      text: 'link', textPosition: 0.5,
+      from: { refIndex: 0 }, to: { point: { x: 100, y: 100 } },
+    }], false), state);
+    const arrow = state.objectsList().find((o) => o.fields.type === 'arrow');
+    return { state, arrowId: arrow.id };
+  };
+
+  test('render API present: returns the mounted label string', async () => {
+    const { state, arrowId } = await makeLabeledArrow();
+    // simulate the app domain object exposing the render-layer API
+    state.window.ds.store.objects.get(arrowId).getTextOnArrowString = () => 'link';
+    const st2 = await runExpr(buildArrowLabelsStateExpr([arrowId]), state);
+    assert.deepEqual(st2.result[arrowId], { str: 'link' });
+  });
+
+  test('render API absent: reports apiMissing (fail-open, not an error)', async () => {
+    const { state, arrowId } = await makeLabeledArrow();
+    const st2 = await runExpr(buildArrowLabelsStateExpr([arrowId]), state);
+    assert.deepEqual(st2.result[arrowId], { apiMissing: true });
+  });
+
+  test('unknown id: reports missing', async () => {
+    const { state } = await makeLabeledArrow();
+    const st2 = await runExpr(buildArrowLabelsStateExpr(['no-such-id']), state);
+    assert.deepEqual(st2.result['no-such-id'], { missing: true });
+  });
+
+  test('label not mounted yet: API returns empty/other string', async () => {
+    const { state, arrowId } = await makeLabeledArrow();
+    state.window.ds.store.objects.get(arrowId).getTextOnArrowString = () => '';
+    const st2 = await runExpr(buildArrowLabelsStateExpr([arrowId]), state);
+    assert.deepEqual(st2.result[arrowId], { str: '' });
+  });
+
+  test('render API throws: reports error instead of failing the whole expr', async () => {
+    const { state, arrowId } = await makeLabeledArrow();
+    state.window.ds.store.objects.get(arrowId).getTextOnArrowString = () => { throw new Error('boom'); };
+    const st2 = await runExpr(buildArrowLabelsStateExpr([arrowId]), state);
+    assert.ok(String(st2.result[arrowId].error).includes('boom'));
   });
 });
 

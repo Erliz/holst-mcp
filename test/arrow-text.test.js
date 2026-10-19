@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildArrowTexts } from '../src/arrow-text.js';
+import { buildArrowTexts, arrowLabelMatches } from '../src/arrow-text.js';
 import { ValidationError } from '../src/validate.js';
 
 
@@ -56,5 +56,32 @@ describe('buildArrowTexts', () => {
     assert.throws(() => buildArrowTexts('x', 1.5), ValidationError);
     assert.throws(() => buildArrowTexts('x', -0.1), ValidationError);
     assert.throws(() => buildArrowTexts('x', 'mid'), ValidationError);
+  });
+});
+
+describe('arrowLabelMatches (render-layer verify, issue #3)', () => {
+  test('exact string match passes', () => {
+    assert.equal(arrowLabelMatches('link', 'link'), true);
+  });
+
+  test('multiline expected vs paragraph-joined actual passes (newline-insensitive)', () => {
+    assert.equal(arrowLabelMatches('a\nb', 'ab'), true);
+    assert.equal(arrowLabelMatches('a\nb', 'a\nb'), true);
+  });
+
+  test('null/undefined actual means no label rendered → fails for real text', () => {
+    assert.equal(arrowLabelMatches('link', null), false);
+    assert.equal(arrowLabelMatches('link', undefined), false);
+    assert.equal(arrowLabelMatches('link', ''), false);
+  });
+
+  test('different strings fail', () => {
+    assert.equal(arrowLabelMatches('link', 'other'), false);
+    assert.equal(arrowLabelMatches('link', 'link2'), false);
+  });
+
+  test('empty expected matches absent actual (no-label contract)', () => {
+    assert.equal(arrowLabelMatches('', null), true);
+    assert.equal(arrowLabelMatches('', ''), true);
   });
 });

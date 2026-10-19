@@ -12,6 +12,7 @@ import {
   buildKindExpr,
   buildTouchUpdatedExpr,
   buildAddSimpleTextExpr,
+  buildArrowLabelsStateExpr,
   buildCanvasStateExpr, buildCameraFitExpr, buildCameraSetExpr,
 } from '../src/eval-scripts.js';
 
@@ -71,6 +72,13 @@ describe('L1: batch exprs', () => {
       compiles(expr);
       noPlaceholders(expr);
     }
+  });
+
+  test('buildArrowLabelsStateExpr compiles; hostile ids stay escaped', () => {
+    const expr = buildArrowLabelsStateExpr(["a'", 'b"q']);
+    compiles(expr);
+    noPlaceholders(expr);
+    assert.ok(expr.includes(JSON.stringify(["a'", 'b"q'])));
   });
 
   test('buildBatchTextWriteExpr compiles with segments and slate nodes', () => {

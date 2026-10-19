@@ -25,3 +25,14 @@ export function buildArrowTexts(text, position = 0.5) {
   }));
   return [{ position, id: randomUUID(), text, editor }];
 }
+
+/**
+ * Compare an expected on-arrow label against what the app's render layer
+ * reports (getTextOnArrowString). Newline-insensitive: the editor mirrors
+ * each \n as a separate paragraph, and some builds join them without \n.
+ * null/undefined actual = "no label rendered" and only matches empty expected.
+ */
+export function arrowLabelMatches(expected, actual) {
+  const norm = (s) => (typeof s === 'string' ? s.replace(/\n/g, '') : '');
+  return norm(expected) === norm(actual);
+}
