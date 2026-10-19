@@ -19,13 +19,13 @@ export function getReference() {
       paleWashes: { violet: '#e4defc', blue: '#cee7fe', green: '#c6ecdb', yellow: '#fff8c6' },
       accents: { red: '#e54d2e', violet: '#6e56cf', cyan: '#05a2c2', green: '#29a383', amber: '#ffc53d' },
     },
-    colorRendering: 'ALL color params accept #RRGGBB hex only (stored as an int internally; get_board_content normalizes MCP-written ints back to the same hex). Objects created manually via the Holst UI may read as palette names (e.g. fillColor.color "violet5") — decode via docs/palette.md in the repo. Holst renders saturated hues harmonized (hue kept, saturation/lights trimmed toward ~57–62% lightness) — identically for every input, so the color you set is the color the UI shows. Pale/dark/gray hexes render exactly.',
+    colorRendering: 'Colors are #RRGGBB everywhere: every color param accepts hex, get_board_content returns hex. Holst renders saturated hues harmonized (hue kept, saturation/lights trimmed toward ~57–62% lightness) — identically for every input, so the color you set is the color the UI shows. Pale/dark/gray hexes render exactly.',
     fontFamilies: {
       verified: ['ShantellSans'],
       fromBundle: ['SourceCodePro (mono)', 'Inter', 'Roboto', 'Montserrat', 'MontserratAlternates', 'OpenSans', 'Arimo', 'Oswald', 'RobotoCondensed', 'EBGaramond', 'Merriweather', 'NotoSerif', 'TimesNewRoman', 'Bitter', 'Georgia', 'Caveat', 'Pacifico', 'Bangers', 'AbrilFatface', 'FredokaOne', 'Graduate', 'LemonTuesday', 'Comic'],
       note: 'tokens are PascalCase family names; mono = SourceCodePro, serif = EBGaramond/Merriweather/NotoSerif/TimesNewRoman',
     },
-    colorFormat: '#RRGGBB hex only (palette names are NOT accepted since v0.6.0) — converts to the integer form Holst stores (e.g. #782baf → 7875503)',
+    colorFormat: '#RRGGBB hex only (palette names are NOT accepted since v0.6.0)',
     typography: {
       fontSize: 'px int on shape/arrow (field fontSize); simple-text converts px → textScale (base 14); sticker uses raw textScale',
       textColor: 'text color field (#RRGGBB); textBackgroundColor = highlight',
@@ -59,6 +59,13 @@ export function getReference() {
       storage: 'plain texts field on the arrow object (no documentId) — visible in get_board_content as texts[]',
     },
     stampType: 'textStamp',
+    screenshots: {
+      tool: 'holst_screenshot — captures the board canvas as MCP image content, NO disk writes',
+      params: 'bbox {x1,y1,x2,y2} fits a world region (camera restored after); omit = current viewport untouched. format jpeg (default, compact) | png; quality 1..100 (default 85); scale css (default, smaller) | device (full retina)',
+      withBase64: 'adds base64 to the text meta — ONLY for agents that must save the file themselves; costs ~2x base64 tokens in context',
+      usage: 'viewing and layout verification (humans + multimodal models). NOT for pixel-exact actions — use holst_get_board_content for data. Slight color shift on P3 displays is normal',
+      timings: '~1s current viewport; ~2s with bbox (camera fit + settle + restore)',
+    },
     timings: {
       batchCreate: 'whole diagram in ONE call: ~10-20s for 30 objects — preferred for 3+ objects',
       addToolsMs: '3000–8000 per object (editor settle + retries) — NORMAL, do not retry on slowness; prefer holst_batch_create for 3+ objects',

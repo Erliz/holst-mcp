@@ -411,3 +411,71 @@ export function buildBatchTextWriteExpr(byIndex, textJobs) {  return `(() => {
     } catch (e) { return [{ idx: -1, ok: false, error: String(e) }]; }
   })()`;
 }
+
+// ─── Screenshot support (v0.7.0) ─────────────────────────────────────────────
+// Camera moves go through the app's own navigation service (never input
+// synthesis). Three small builders: read state, fit a world bbox, restore.
+
+/** Read canvas + camera state for screenshot capture (read-only). */
+export function buildCanvasStateExpr() {
+  return `(() => {
+    try {
+      const obj = ds.store.objects.entries().next().value?.[1];
+      if (!obj) return { __error: 'board has no objects to reach the navigation service' };
+      const nav = obj.objectBoundsService.visibilityService.navigationService;
+      const cc = nav.canvasContainer;
+      const r = cc && cc.getBoundingClientRect ? cc.getBoundingClientRect() : null;
+      const v = nav.viewportRect;
+      return {
+        canvasRect: r ? { x: r.x, y: r.y, width: r.width, height: r.height } : null,
+        dpr: window.devicePixelRatio || 1,
+        viewport: { x: v.x, y: v.y, width: v.width ?? v.w, height: v.height ?? v.h },
+        zoom: nav.zoom,
+      };
+    } catch (e) { return { __error: String(e) }; }
+  })()`;
+}
+
+/**
+ * Fit the camera onto a world bbox (padding fraction applied in-page) and
+ * report the exact applied center/zoom so the caller can restore later.
+ */
+export function buildCameraFitExpr(bbox, padFraction = 0.12) {
+  const x1 = Number(bbox.x1), y1 = Number(bbox.y1), x2 = Number(bbox.x2), y2 = Number(bbox.y2);
+  if (![x1, y1, x2, y2].every(Number.isFinite)) throw new Error('buildCameraFitExpr: bbox must be finite numbers');
+  const pad = Number(padFraction);
+  return `(() => {
+    try {
+      const obj = ds.store.objects.entries().next().value?.[1];
+      if (!obj) return { __error: 'board has no objects to reach the navigation service' };
+      const nav = obj.objectBoundsService.visibilityService.navigationService;
+      const v = nav.viewportRect;
+      const viewW = v.width ?? v.w, viewH = v.height ?? v.h;
+      const pad = ${pad};
+      const w = (${x2} - ${x1}) * (1 + 2 * pad), h = (${y2} - ${y1}) * (1 + 2 * pad);
+      let zoom = Math.min(viewW / w, viewH / h);
+      if (!Number.isFinite(zoom) || zoom <= 0) return { __error: 'computed zoom is not finite' };
+      const cx = (${x1} + ${x2}) / 2, cy = (${y1} + ${y2}) / 2;
+      nav.setViewportCenter(cx, cy);
+      nav.zoom = zoom;
+      // Report the APPLIED zoom: the setter may clamp extreme fits.
+      return { applied: { center: { x: cx, y: cy }, zoom: nav.zoom } };
+    } catch (e) { return { __error: String(e) }; }
+  })()`;
+}
+
+/** Restore the camera to an explicit center/zoom. */
+export function buildCameraSetExpr(center, zoom) {
+  const x = Number(center?.x), y = Number(center?.y), z = Number(zoom);
+  if (![x, y, z].every(Number.isFinite)) throw new Error('buildCameraSetExpr: center/zoom must be finite numbers');
+  return `(() => {
+    try {
+      const obj = ds.store.objects.entries().next().value?.[1];
+      if (!obj) return { __error: 'board has no objects to reach the navigation service' };
+      const nav = obj.objectBoundsService.visibilityService.navigationService;
+      nav.setViewportCenter(${x}, ${y});
+      nav.zoom = ${z};
+      return { ok: true };
+    } catch (e) { return { __error: String(e) }; }
+  })()`;
+}

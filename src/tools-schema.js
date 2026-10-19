@@ -7,8 +7,7 @@ import {
   whoAmI, doctor, listBoards, batchCreate, getBoardContent, getBoardSummary,
   searchBoardText, addSticker, updateText, deleteObject, deleteObjects,
   addShape, addSimpleText, addArrow, moveObject, resizeObject, setColor,
-  addFrame, addStamp,
-} from './holst.js';
+  addFrame, addStamp, screenshot } from './holst.js';
 import { getReference } from './reference.js';
 import { SHAPE_TYPES, STROKE_STYLES } from './validate.js';
 
@@ -377,6 +376,27 @@ export const TOOLS = [
     },
   },
   {
+    name: 'holst_screenshot',
+    description:
+      'Capture the board canvas as an image (MCP image content — no disk writes). ' +
+      'For VIEWING and layout verification by humans/multimodal models; NOT for pixel-exact actions — use holst_get_board_content for data. ' +
+      'Slight color shift on P3 displays is normal. The board must contain at least one object (the camera service is reached through it). Default captures the current viewport without moving the camera; bbox {x1,y1,x2,y2} fits that world region instead (camera is restored after). ' +
+      'jpeg default (compact); scale css = CSS pixels (4x smaller than device). withBase64 adds the base64 to the text meta for agents that must save the file themselves (~2x base64 tokens — only when needed).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        boardId: { type: 'string', description: 'UUID board id' },
+        bbox: { type: 'object', description: '{ x1, y1, x2, y2 } world coords — fit this region (camera restored afterwards); omit to capture the current viewport' },
+        format: { type: 'string', enum: ['jpeg', 'png'], description: 'jpeg (default, compact) or png (lossless)' },
+        quality: { type: 'number', description: 'jpeg quality 1..100 (default 85)' },
+        scale: { type: 'string', enum: ['css', 'device'], description: 'css = CSS pixels (default, smaller); device = full devicePixelRatio resolution' },
+        withBase64: { type: 'boolean', description: 'Also embed base64 in the text meta (for non-multimodal agents saving the file; costs ~2x base64 tokens)' },
+      },
+      required: ['boardId'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'holst_set_color',
     description:
       'Set fillColor and/or strokeColor (#RRGGBB hex), strokeStyle (solid, dashed, dotted), strokeWidth, fillOpacity / strokeOpacity (0..1 — translucent washes), and backgroundStyle on frames. Suggested colors: holst_reference.',
@@ -422,5 +442,6 @@ export const DISPATCH = {
     strokeWidth: args.strokeWidth, fillOpacity: args.fillOpacity, strokeOpacity: args.strokeOpacity,
   }),
   holst_add_frame: (args) => addFrame(args.boardId, args),
+  holst_screenshot: (args) => screenshot(args.boardId, { bbox: args.bbox, format: args.format, quality: args.quality, scale: args.scale, withBase64: args.withBase64 }),
   holst_add_stamp: (args) => addStamp(args.boardId, args),
 };

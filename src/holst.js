@@ -3,6 +3,7 @@
 import { randomUUID } from 'node:crypto';
 import { openHolstSession, listTabs, isBoardUrl, isHolstUrl, getCdpJSON, acquirePooledSession, releaseSession } from './cdp.js';
 import { normalizeDumpColors } from './dump-colors.js';
+import { buildCanvasStateExpr, buildCameraFitExpr, buildCameraSetExpr } from './eval-scripts.js';
 import { ensureCdp } from './autostart.js';
 import {
   ValidationError,
@@ -1491,4 +1492,150 @@ function doctorConfig() {
     roBoardIdsCount: ((process.env.HOLST_RO_BOARD_IDS || '').match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi) || []).length,
     maxDumpBytes: Number(process.env.HOLST_MAX_DUMP_BYTES) || 2000000,
   };
+}
+
+/**
+ * Screenshot (v0.7.0): capture the board canvas as an image, without any
+ * disk writes. Returns a special envelope { __image, ...meta } — the server
+ * layer converts __image into an MCP ImageContent block (multimodal clients
+ * see the picture; text-only models see only the compact meta JSON).
+ * withBase64: true additionally embeds the base64 into the meta for agents
+ * that need to save the file themselves (~2x base64 tokens — opt-in).
+ *
+ * Camera: bbox fits the view through the app's own navigation service
+ * (never input synthesis), then the previous camera position is restored.
+ * Colors: CDP captures have a slight color shift on P3 displays — fine for
+ * layout verification, not for pixel-exact color checks.
+ */
+export async function screenshot(boardId, opts = {}) {
+  assertBoardId(boardId);
+  assertBoardReadable(boardId);
+  const { bbox, withBase64 = false } = opts;
+  const format = opts.format === undefined ? 'jpeg' : opts.format;
+  const scale = opts.scale === undefined ? 'css' : opts.scale;
+  const quality = opts.quality === undefined ? 85 : num(opts.quality, 'quality', { min: 1, max: 100 });
+  if (!['jpeg', 'png'].includes(format)) throw new ValidationError('format must be jpeg or png');
+  if (!['css', 'device'].includes(scale)) throw new ValidationError('scale must be css or device');
+  if (bbox !== undefined) {
+    if (bbox === null || typeof bbox !== 'object' || Array.isArray(bbox)) {
+      throw new ValidationError('bbox must be an object { x1, y1, x2, y2 }');
+    }
+    for (const k of ['x1', 'y1', 'x2', 'y2']) num(bbox[k], `bbox.${k}`);
+    if (!(bbox.x2 > bbox.x1 && bbox.y2 > bbox.y1)) {
+      throw new ValidationError('bbox must satisfy x2 > x1 and y2 > y1');
+    }
+  }
+  // Serialize captures: concurrent calls on the same board would interleave
+  // camera state (fit/restore races) and capture each other's view.
+  const run = async () => {
+    const session = await getBoardSession(boardId);
+    try {
+      return await screenshotWithSession(session, { bbox, format, quality, scale, withBase64 });
+    } finally {
+      releaseSession(session);
+    }
+  };
+  const prev = screenshotQueue;
+  screenshotQueue = (async () => { await prev.catch(() => {}); return run(); })();
+  try {
+    return await screenshotQueue;
+  } finally {
+    screenshotQueue = Promise.resolve();
+  }
+}
+
+let screenshotQueue = Promise.resolve();
+
+/**
+ * Testable orchestration over an existing CDP session: state → (optional fit)
+ * → capture → restore. Exported for L1 tests with a stub session.
+ *
+ * Meta honesty rules (learned in review):
+ * - widthPx/heightPx describe the ACTUAL bitmap: CDP emits clip × scale × dpr,
+ *   so css mode (clip.scale=1/dpr) yields CSS-pixel size, device mode ×dpr.
+ * - the camera restore runs in a finally AFTER a fit (capture failure must not
+ *   leave the camera moved) and its real outcome lands in cameraRestored /
+ *   cameraRestoreError — never assumed.
+ */
+/**
+ * Actual bitmap dimensions, decoded from the returned image bytes (PNG IHDR /
+ * JPEG SOF) — the only source that matches CDP's own rounding of fractional
+ * clip rects. Returns null when parsing fails (caller falls back to math).
+ */
+function bitmapDims(buf, mimeType) {
+  if (mimeType === 'image/png' && buf.length > 24 && buf[0] === 0x89) {
+    return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+  }
+  let i = 2;
+  while (i + 9 < buf.length) {
+    if (buf[i] !== 0xff) { i++; continue; }
+    const m = buf[i + 1];
+    if (m >= 0xc0 && m <= 0xc3) return { w: buf.readUInt16BE(i + 7), h: buf.readUInt16BE(i + 5) };
+    if (m === 0xd8 || (m >= 0xd0 && m <= 0xd9)) { i += 2; continue; }
+    i += 2 + buf.readUInt16BE(i + 2);
+  }
+  return null;
+}
+
+export async function screenshotWithSession(session, { bbox, format = 'jpeg', quality = 85, scale = 'css', withBase64 = false } = {}) {
+  const before = await session.evaluate(buildCanvasStateExpr());
+  if (before?.__error) throw new Error(before.__error);
+  if (!before.canvasRect) throw new Error('canvas container not found — is the board view open?');
+
+  const restoreCamera = async () => {
+    const cx = before.viewport.x + before.viewport.width / 2;
+    const cy = before.viewport.y + before.viewport.height / 2;
+    try {
+      const r = await session.evaluate(buildCameraSetExpr({ x: cx, y: cy }, before.zoom));
+      if (r?.__error) return { restored: false, error: r.__error };
+      return { restored: true, error: null };
+    } catch (e) {
+      return { restored: false, error: String(e) };
+    }
+  };
+
+  let applied = null;
+  let restore = { restored: !bbox, error: null };
+  let shot = null;
+  try {
+    if (bbox !== undefined) {
+      const fit = await session.evaluate(buildCameraFitExpr(bbox));
+      if (fit?.__error) throw new Error(fit.__error);
+      applied = fit.applied;
+      await sleep(700); // let the renderer settle after the camera move
+    }
+    shot = await session.send('Page.captureScreenshot', {
+      format,
+      ...(format === 'jpeg' ? { quality: Math.round(quality) } : {}),
+      clip: {
+        x: before.canvasRect.x, y: before.canvasRect.y,
+        width: before.canvasRect.width, height: before.canvasRect.height,
+        scale: scale === 'css' ? 1 / before.dpr : 1,
+      },
+    });
+  } finally {
+    if (bbox !== undefined) restore = await restoreCamera();
+  }
+
+  // Actual bitmap = canvasRect (CSS px) × outScale; decimals differ by CDP
+  // rounding — decode the real dims from the returned bytes when possible.
+  const outScale = scale === 'css' ? 1 : before.dpr;
+  const dims = bitmapDims(Buffer.from(shot.data, 'base64'), format === 'png' ? 'image/png' : 'image/jpeg');
+  const meta = {
+    ok: true,
+    format,
+    mimeType: format === 'png' ? 'image/png' : 'image/jpeg',
+    widthPx: dims ? dims.w : Math.round(before.canvasRect.width * outScale),
+    heightPx: dims ? dims.h : Math.round(before.canvasRect.height * outScale),
+    bytes: Math.round(shot.data.length * 3 / 4),
+    worldRect: bbox !== undefined
+      ? { x1: bbox.x1, y1: bbox.y1, x2: bbox.x2, y2: bbox.y2 }
+      : { x1: before.viewport.x, y1: before.viewport.y, x2: before.viewport.x + before.viewport.width, y2: before.viewport.y + before.viewport.height },
+    cameraMoved: bbox !== undefined,
+    cameraRestored: restore.restored,
+    ...(restore.error ? { cameraRestoreError: restore.error } : {}),
+    ...(applied ? { fitApplied: applied } : {}),
+    ...(withBase64 ? { base64: shot.data } : {}),
+  };
+  return { __image: { data: shot.data, mimeType: meta.mimeType }, ...meta };
 }

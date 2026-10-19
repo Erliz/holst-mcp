@@ -21,11 +21,14 @@ Everything below is operational knowledge you need — no external files require
    Individual \`holst_add_*\` tools are fine for single objects.
 5. Verify with \`holst_get_board_summary\` — every block must show its text.
    Missing text → retry once via \`holst_update_text\` (idempotent).
+6. \`holst_screenshot\` — visual check for humans/multimodal models: pass bbox around
+   the created area; the camera returns to its place afterwards. NOT for pixel-exact
+   color checks (slight P3 shift).
 
 ## Conventions
 - Coordinates: top-left origin, y grows downward. Boxes 260×56 with ≥180px vertical
   gaps read well; x 300–1800 / y 80–1600 fits one screen.
-- Colors: #RRGGBB hex only (palette names are not accepted). Suggested set —
+- Colors: #RRGGBB hex. Suggested set —
   ink #202020, muted #8d8d8d, washes #e4defc/#cee7fe/#c6ecdb/#fff8c6, accents #e54d2e/#6e56cf/#05a2c2/#ffc53d.
   Call \`holst_reference\` for the full list.
 - Arrows attach to objects: \`{ objectId, relativePoint: { x, y } }\`, relativePoint in 0..1

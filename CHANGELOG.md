@@ -5,6 +5,48 @@
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-10-19
+
+Новая тулза чтения: `holst_screenshot` — снимок канвы доски через нативный CDP
+`Page.captureScreenshot`, без записи на диск. Дизайн сверен с эталоном playwright-mcp.
+
+### Добавлено
+- Возврат: MCP ImageContent (мультимодальные клиенты видят кадр нативно) + компактный
+  текстовый метa-JSON (`{ok, format, mimeType, widthPx, heightPx, bytes, worldRect, cameraMoved, cameraRestored, cameraRestoreError?, fitApplied?}`); размеры — фактический битмап (clip × scale × dpr)
+- `bbox {x1,y1,x2,y2}`: камера доезжает на регион через собственный сервис приложения
+  (не input-синтез), снимок, камера возвращается на прежнее место; без bbox — текущий
+  вьюпорт, нулевое вмешательство
+- `format` jpeg (дефолт, компактно) | png; `quality` 1..100 (дефолт 85);
+  `scale` css (дефолт — CSS-пиксели, кадр ~4× меньше retina) | device
+- `withBase64: true` — опционально добавляет base64 в текстовую мету для не-мультимодальных
+  агентов, которым нужно сохранить файл через свой shell (~2× base64 токенов — осознанный opt-in;
+  стандартного zero-context пути в MCP сегодня нет — экосистема решает это записью файла на диск
+  сервером, здесь записи нет по решению владельца)
+- Клип строго по канвасу (`canvasContainer.getBoundingClientRect()`) — UI-хром приложения
+  (аватары, воркспейс-лист) в кадр не попадает
+- Camera-билдеры в `eval-scripts.js` (state/fit/restore) с L1-компиляцией и проверенными
+  конечными числами; RO-доски разрешены (операция чтения)
+
+### Изменено
+- server.js: конвертация envelope `{__image,…}` в [text, image]-контент; версия сервера
+  теперь из package.json (была захардкожена 0.3.0)
+
+## [0.6.1] — 2026-10-19
+
+Чтение: единый hex-контракт без сносок про внутренности.
+
+### Изменено
+- `get_board_content` транслирует имена палитры UI-созданных объектов в hex на чтении
+  (генерируемая таблица `src/palette-data.js`, 276 токенов; источник — `docs/palette.md`).
+  Агент больше никогда не видит токенов — ни в API, ни в дампах
+- MCP-поверхности (`holst_reference`, usage-manual) очищены от внутренней модели хранения:
+  контракт — «цвета `#RRGGBB` везде, запись и чтение» (прежде упоминались имена токенов
+  и файл репо, недоступный потребителю)
+
+### Нюанс
+- Roundtrip для UI-объектов: прочитанный hex, записанный обратно, становится int в хранилище —
+  пикер покажет custom вместо свотча палитры (рендер идентичен)
+
 ## [0.6.0] — 2026-10-19
 
 Breaking: цветовой API переведён на `#RRGGBB`-only. Имена палитры (gray12, violet5…)
@@ -147,7 +189,9 @@ Security hardening, нативный Slate-конвейер, self-sufficient MCP
   `holst_set_color`, `holst_delete_object`
 - `bin/start-holst.sh` — запуск Holst.app с дебаг-портом (quarantine-снятие, рестарты)
 
-[Unreleased]: https://github.com/Erliz/holst-mcp/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/Erliz/holst-mcp/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/Erliz/holst-mcp/compare/v0.6.1...v0.7.0
+[0.6.1]: https://github.com/Erliz/holst-mcp/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/Erliz/holst-mcp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Erliz/holst-mcp/compare/v0.3.0...v0.5.0
 [0.3.0]: https://github.com/Erliz/holst-mcp/compare/v0.1.0...v0.3.0

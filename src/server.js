@@ -5,6 +5,7 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import pkg from '../package.json' with { type: 'json' };
 import { TOOLS, DISPATCH } from './tools-schema.js';
 import {
   CallToolRequestSchema,
@@ -14,10 +15,11 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { sanitizeError } from './policy.js';
+import { toToolResult } from './tool-result.js';
 import { USAGE_DOC } from './docs.js';
 
 const server = new Server(
-  { name: 'holst-mcp', version: '0.3.0' },
+  { name: 'holst-mcp', version: pkg.version },
   { capabilities: { tools: {}, resources: {} } }
 );
 
@@ -54,15 +56,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const handler = DISPATCH[name];
     if (!handler) throw new Error('Unknown tool: ' + name);
     let result = await handler(args);
-    // For summary, return text directly. For everything else — JSON.
-    if (name === 'holst_get_board_summary' && result?.summary) {
-      return {
-        content: [{ type: 'text', text: result.summary }],
-      };
-    }
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-    };
+    return toToolResult(result, name);
   } catch (e) {
     return {
       isError: true,

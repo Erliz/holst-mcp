@@ -11,6 +11,7 @@ import {
   buildKindExpr,
   buildTouchUpdatedExpr,
   buildAddSimpleTextExpr,
+  buildCanvasStateExpr, buildCameraFitExpr, buildCameraSetExpr,
 } from '../src/eval-scripts.js';
 
 // L1 guards (plan: docs/plans/2026-10-18-unit-testing-cdp-layer.md):
@@ -128,5 +129,22 @@ describe('L1: batch delete', () => {
     compiles(expr);
     noPlaceholders(expr);
     assert.ok(expr.includes(JSON.stringify(["a'", 'b', 'c'])));
+  });
+});
+
+describe('L1: screenshot camera builders', () => {
+  test('state/fit/restore compile; numbers embedded, not string-interpolated', () => {
+    compiles(buildCanvasStateExpr());
+    const fit = buildCameraFitExpr({ x1: -12.5, y1: 0, x2: 1e3, y2: 42.7 });
+    compiles(fit);
+    assert.ok(fit.includes('-12.5') && fit.includes('1000'));
+    const set = buildCameraSetExpr({ x: 5, y: -3 }, 0.25);
+    compiles(set);
+    assert.ok(set.includes('setViewportCenter(5, -3)') && set.includes('nav.zoom = 0.25'));
+  });
+
+  test('non-finite bbox/center rejected before any script is built', () => {
+    assert.throws(() => buildCameraFitExpr({ x1: NaN, y1: 0, x2: 1, y2: 1 }), /finite/);
+    assert.throws(() => buildCameraSetExpr({ x: 1, y: Infinity }, 1), /finite/);
   });
 });

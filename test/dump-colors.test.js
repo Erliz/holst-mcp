@@ -10,8 +10,8 @@ describe('colorIntToHex', () => {
   });
 });
 
-describe('normalizeDumpColors (read path: MCP ints → hex, UI tokens stay)', () => {
-  test('object-level color fields: int color → hex string, token color untouched', () => {
+describe('normalizeDumpColors (read path: every color presents as #RRGGBB)', () => {
+  test('object-level color fields: int color → hex string', () => {
     const content = {
       objects: {
         a: {
@@ -21,7 +21,6 @@ describe('normalizeDumpColors (read path: MCP ints → hex, UI tokens stay)', ()
           textColor: { color: 0xffffff, opacity: 1 },
           textBackgroundColor: { color: 0xfff0ee },
         },
-        b: { type: 'frame', fillColor: { color: 'violet5', opacity: 1 }, backgroundStyle: 2 },
       },
       documents: {},
     };
@@ -30,8 +29,20 @@ describe('normalizeDumpColors (read path: MCP ints → hex, UI tokens stay)', ()
     assert.equal(content.objects.a.strokeColor.color, '#202020');
     assert.equal(content.objects.a.textColor.color, '#ffffff');
     assert.equal(content.objects.a.textBackgroundColor.color, '#fff0ee');
-    assert.equal(content.objects.b.fillColor.color, 'violet5'); // UI-created: name stays (docs/palette.md decodes)
-    assert.equal(content.objects.b.backgroundStyle, 2); // non-color ints untouched
+  });
+
+  test('UI-written palette names translate to hex (violet5 → #e4defc)', () => {
+    const content = { objects: { b: { type: 'frame', fillColor: { color: 'violet5', opacity: 1 }, backgroundStyle: 2 } } };
+    normalizeDumpColors(content);
+    assert.equal(content.objects.b.fillColor.color, '#e4defc');
+    assert.equal(content.objects.b.backgroundStyle, 2); // non-color fields untouched
+  });
+
+  test('unknown strings pass through untouched (no guessing)', () => {
+    const content = { objects: { a: { fillColor: { color: 'notapalette' }, strokeColor: { color: 'gray12' } } } };
+    normalizeDumpColors(content);
+    assert.equal(content.objects.a.fillColor.color, 'notapalette');
+    assert.equal(content.objects.a.strokeColor.color, '#202020'); // gray12 is a known token
   });
 
   test('opacity rides along; non-color numeric fields untouched; no color fields = no-op', () => {
@@ -51,9 +62,8 @@ describe('normalizeDumpColors (read path: MCP ints → hex, UI tokens stay)', ()
     const content = { documents: {} };
     normalizeDumpColors(content);
     assert.deepEqual(content, { documents: {} });
-    const weird = { objects: { a: { fillColor: null, strokeColor: { color: 'tomato8' } } } };
+    const weird = { objects: { a: { fillColor: null } } };
     normalizeDumpColors(weird);
     assert.equal(weird.objects.a.fillColor, null);
-    assert.equal(weird.objects.a.strokeColor.color, 'tomato8');
   });
 });
