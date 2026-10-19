@@ -15,6 +15,7 @@ import {
   buildArrowLabelsStateExpr,
   buildCanvasStateExpr, buildCameraFitExpr, buildCameraSetExpr,
 } from '../src/eval-scripts.js';
+import { createState, FakeNavigationService } from './helpers/fake-holst.js';
 
 // L1 guards (plan: docs/plans/2026-10-18-unit-testing-cdp-layer.md):
 // every eval script must (a) compile under the page's parser, (b) carry no
@@ -163,11 +164,75 @@ describe('L1: screenshot camera builders', () => {
     assert.ok(fit.includes('-12.5') && fit.includes('1000'));
     const set = buildCameraSetExpr({ x: 5, y: -3 }, 0.25);
     compiles(set);
-    assert.ok(set.includes('setViewportCenter(5, -3)') && set.includes('nav.zoom = 0.25'));
+    assert.ok(set.includes('setViewportCenter(5, -3)') && set.includes('setZoomManual(0.25)'));
+    // Regression guard (issue #15): a bare `nav.zoom = x` write is a silent
+    // no-op on current builds — the zoom must go through the method API,
+    // with the bare write allowed only as the last-resort legacy fallback.
+    const onlyFallbackZoomWrites = (expr) => [...expr.matchAll(/nav\s*\.\s*zoom\s*=/g)]
+      .every((m) => expr.slice(0, m.index).split('\n').pop().trim().startsWith('else'));
+    assert.ok(onlyFallbackZoomWrites(set), 'no unconditional nav.zoom writes in camera scripts');
+    assert.ok(onlyFallbackZoomWrites(fit), 'no unconditional nav.zoom writes in camera scripts');
   });
 
   test('non-finite bbox/center rejected before any script is built', () => {
     assert.throws(() => buildCameraFitExpr({ x1: NaN, y1: 0, x2: 1, y2: 1 }), /finite/);
     assert.throws(() => buildCameraSetExpr({ x: 1, y: Infinity }, 1), /finite/);
+  });
+});
+
+describe('L2: camera builders vs fake navigation service (issue #15)', () => {
+  // CDP Runtime.evaluate runs scripts in SLOPPY mode — the live failure mode
+  // of issue #15 was a SILENT no-op (getter-only `zoom` + non-strict
+  // assignment), not a TypeError. Mirror the page here instead of reusing
+  // fake-holst's strict runExpr.
+  const evalCamera = (expr, state) => new Function('window', `return (${expr});`)(state.window);
+  const attachNav = (state, nav) => {
+    state.window.ds.yPersistence.yDoc.getMap('objects')
+      .set('camera-probe', { objectBoundsService: { visibilityService: { navigationService: nav } } });
+  };
+
+  test('fit applies zoom through the method API, not a bare field write', () => {
+    const state = createState();
+    const nav = new FakeNavigationService({ zoom: 0.087, viewport: { x: 0, y: 0, width: 1600, height: 900 } });
+    attachNav(state, nav);
+    const r = evalCamera(buildCameraFitExpr({ x1: 0, y1: 0, x2: 800, y2: 450 }), state);
+    assert.equal(r.__error, undefined);
+    // pad 0.12: w = 800 × 1.24, view aspect matches → fit = 1600 / 992.
+    const want = 1600 / (800 * 1.24);
+    assert.ok(Math.abs(nav.zoom - want) < 1e-9, `zoom applied (got ${nav.zoom}, want ${want})`);
+    const zoomCall = nav.calls.find((c) => c.method === 'setZoomManual' || c.method === 'setZoom');
+    assert.ok(zoomCall, 'zoom went through a method setter');
+    assert.ok(Math.abs(zoomCall.args[0] - want) < 1e-9);
+    const center = nav.calls.find((c) => c.method === 'setViewportCenter');
+    assert.deepEqual(center.args, [400, 225]);
+    assert.equal(r.applied.zoom, nav.zoom); // meta reports the readback
+  });
+
+  test('restore applies explicit center/zoom and reports the readback', () => {
+    const state = createState();
+    const nav = new FakeNavigationService({ zoom: 1.9, viewport: { x: 0, y: 0, width: 1600, height: 900 } });
+    attachNav(state, nav);
+    const r = evalCamera(buildCameraSetExpr({ x: 100, y: -50 }, 0.75), state);
+    assert.deepEqual(r, { ok: true, zoom: 0.75 });
+    assert.deepEqual(
+      nav.calls.filter((c) => c.method !== 'setViewportCenter'),
+      [{ method: 'setZoomManual', args: [0.75] }],
+    );
+    assert.deepEqual(nav.calls.find((c) => c.method === 'setViewportCenter').args, [100, -50]);
+  });
+
+  test('legacy nav without method setters: bare assignment fallback still works', () => {
+    const state = createState();
+    const nav = {
+      zoom: 0.5,
+      viewportRect: { x: 0, y: 0, width: 1000, height: 500 },
+      setViewportCenter(cx, cy) { this.viewportRect.x = cx - 500; this.viewportRect.y = cy - 250; },
+    };
+    attachNav(state, nav);
+    const r = evalCamera(buildCameraFitExpr({ x1: 0, y1: 0, x2: 500, y2: 250 }), state);
+    assert.equal(r.__error, undefined);
+    const want = 1000 / (500 * 1.24); // ≈ 1.6129
+    assert.ok(Math.abs(nav.zoom - want) < 1e-9, `legacy fallback applied (got ${nav.zoom}, want ${want})`);
+    assert.ok(Math.abs(r.applied.zoom - want) < 1e-9);
   });
 });

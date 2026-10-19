@@ -40,6 +40,29 @@ class FakeDataTransfer {
   getData(k) { return this.data[k]; }
 }
 
+// Navigation service mirroring the live app build (verified on Holst 0.0.7,
+// issue #15): `zoom` is a GETTER-ONLY accessor on the prototype, so a bare
+// `nav.zoom = x` write is a silent no-op under CDP's sloppy-mode evaluate.
+// Camera moves must go through the method API; the setters record their
+// calls so L2 tests can assert which method ran and with what args.
+export class FakeNavigationService {
+  #zoom;
+  constructor({ zoom = 1, viewport = { x: 0, y: 0, width: 1600, height: 900 } } = {}) {
+    this.#zoom = zoom;
+    this.viewport = { ...viewport };
+    this.calls = [];
+  }
+  get zoom() { return this.#zoom; }
+  get viewportRect() { return this.viewport; }
+  setViewportCenter(cx, cy) {
+    this.calls.push({ method: 'setViewportCenter', args: [cx, cy] });
+    this.viewport.x = cx - this.viewport.width / 2;
+    this.viewport.y = cy - this.viewport.height / 2;
+  }
+  setZoomManual(z) { this.calls.push({ method: 'setZoomManual', args: [z] }); this.#zoom = z; }
+  setZoom(z) { this.calls.push({ method: 'setZoom', args: [z] }); this.#zoom = z; }
+}
+
 export function createState() {
   const objectsMap = new Map(); // id → FakeYMap
   const documentsMap = new Map(); // docId → FakeYText
@@ -97,7 +120,11 @@ export function createState() {
       ds: {
         yPersistence: { yDoc },
         store: {
-          objects: { has: (id) => objectsMap.has(id), get: (id) => objectsMap.get(id) },
+          objects: {
+            has: (id) => objectsMap.has(id),
+            get: (id) => objectsMap.get(id),
+            entries: () => objectsMap.entries(),
+          },
           objectBuilder: { singleDocumentStore: sds, getApp: () => app },
         },
       },
