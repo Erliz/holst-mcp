@@ -32,4 +32,5 @@ tmp/
 # opencode local settings (per-machine MCP config)
 opencode.json
 opencode.jsonc
-.opencode/
+.opencode/*
+!.opencode/commands/
