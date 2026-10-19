@@ -219,7 +219,7 @@ export const TOOLS = [
     description:
       'Delete MANY objects in ONE call (`ids` = object ids — the same ids called objectId in other tools; from get_board_content / creation results). ' +
       'Cascade note: deleting a node removes its attached arrows too — those ids report {ok: true, alreadyGone: true}, not an error. ' +
-      'Uses the app-native removal path per id; result: { ok, deleted, report: {id: {ok|alreadyGone|error}} }. Limit 200 per call. Irreversible — confirm intent.',
+      'Deletes in chunks of 10 with a per-chunk scaled CDP timeout (no 15s timeouts on big batches). Result: { ok, deleted, alreadyGone, failed, report: {id: {ok|alreadyGone|error}} } — deleted counts real removals only. Limit 200 per call. Irreversible — confirm intent.',
     inputSchema: {
       type: 'object',
       properties: {

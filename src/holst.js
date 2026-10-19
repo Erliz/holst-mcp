@@ -738,6 +738,34 @@ export async function deleteObject(boardId, objectId) {
   }
 }
 
+// Chunked delete orchestration (issue #5): one Runtime.evaluate per chunk with
+// a per-id scaled CDP timeout. A single evaluate for ALL ids ran a sequential
+// in-page removal loop (1-3s editor settle per object) that blew past the 15s
+// CDP default — the call rejected with a timeout while the page kept deleting
+// (a false error for the caller). Chunking bounds in-page work per roundtrip;
+// the scaled timeout covers worst-case settles without hanging forever.
+export const DELETE_CHUNK_SIZE = 10;
+export const DELETE_CHUNK_BASE_TIMEOUT_MS = 15000;
+export const DELETE_CHUNK_PER_ID_MS = 3000; // worst-case per-object settle (live: 1-3s)
+
+export async function deleteObjectsWithSession(session, ids) {
+  const report = {};
+  for (let i = 0; i < ids.length; i += DELETE_CHUNK_SIZE) {
+    const chunk = ids.slice(i, i + DELETE_CHUNK_SIZE);
+    const res = await session.evaluate(buildDeleteObjectsExpr(chunk), {
+      awaitPromise: true,
+      timeoutMs: DELETE_CHUNK_BASE_TIMEOUT_MS + DELETE_CHUNK_PER_ID_MS * chunk.length,
+    });
+    if (res?.__error) throw new Error(res.__error);
+    Object.assign(report, res?.report || {});
+  }
+  const entries = Object.values(report);
+  const deleted = entries.filter((r) => r.ok && !r.alreadyGone).length;
+  const alreadyGone = entries.filter((r) => r.ok && r.alreadyGone).length;
+  const failed = entries.filter((r) => !r.ok).length;
+  return { ok: failed === 0, deleted, alreadyGone, failed, report };
+}
+
 /**
  * Add a section header — a shape (square by default) with a text label inside.
  * shapeType: 'square' | 'circle' | 'round-rect' | 'rhombus' | 'triangle' (Holst supports more)
@@ -753,9 +781,7 @@ export async function deleteObjects(boardId, ids) {
   for (const id of ids) assertObjectId(id);
   const session = await getBoardSession(boardId);
   try {
-    const result = await session.evaluate(buildDeleteObjectsExpr(ids), { awaitPromise: true });
-    if (result?.__error) throw new Error(result.__error);
-    return result;
+    return await deleteObjectsWithSession(session, ids);
   } finally {
     releaseSession(session);
   }
