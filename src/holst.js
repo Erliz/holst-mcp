@@ -3,6 +3,7 @@
 import { randomUUID } from 'node:crypto';
 import { openHolstSession, listTabs, isBoardUrl, isHolstUrl, getCdpJSON, acquirePooledSession, releaseSession } from './cdp.js';
 import { normalizeDumpColors } from './dump-colors.js';
+import { shapeContent } from './dump-shape.js';
 import { buildCanvasStateExpr, buildCameraFitExpr, buildCameraSetExpr } from './eval-scripts.js';
 import { ensureCdp } from './autostart.js';
 import {
@@ -317,22 +318,7 @@ export async function getBoardContent(boardId, opts = {}) {
     // UI-written palette names pass through (map: docs/palette.md).
     normalizeDumpColors(content);
     // Response shaping — saves LLM tokens; the CDP dump stays complete.
-    if (bbox || positionsOnly) {
-      const inBbox = (o) => {
-        if (!bbox) return true;
-        const x = o.position?.x ?? 0, y = o.position?.y ?? 0;
-        const w = o.width ?? 0, h = o.height ?? 0;
-        return x < bbox.x2 && x + w > bbox.x1 && y < bbox.y2 && y + h > bbox.y1;
-      };
-      const objects = {};
-      for (const [id, o] of Object.entries(content.objects || {})) {
-        if (!inBbox(o)) continue;
-        objects[id] = positionsOnly
-          ? { type: o.type, x: o.position?.x ?? 0, y: o.position?.y ?? 0, w: o.width ?? 0, h: o.height ?? 0 }
-          : o;
-      }
-      content = positionsOnly ? { objects } : { ...content, objects };
-    }
+    content = shapeContent(content, { bbox, positionsOnly });
     return { meta, content };
   } finally {
     releaseSession(session);

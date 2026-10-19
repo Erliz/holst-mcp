@@ -78,7 +78,7 @@ export const TOOLS = [
     name: 'holst_get_board_content',
     description:
       'Full raw dump of a board: all objects (with coordinates) + all document texts. Size-capped by HOLST_MAX_DUMP_BYTES (default 2MB) — for big boards use holst_search_text or holst_get_board_summary instead. ' +
-      'Token savers: bbox {x1,y1,x2,y2} returns only overlapping objects; positionsOnly:true returns compact {type,x,y,w,h} without texts.',
+      'Token savers: bbox {x1,y1,x2,y2} returns only overlapping objects; positionsOnly:true returns compact {type,x,y,w,h} without texts. Arrows are included in both: their box is derived from start/end endpoints (attached endpoints resolve to the referenced object; curved arrows are approximated by their endpoint box).',
     inputSchema: {
       type: 'object',
       properties: {
