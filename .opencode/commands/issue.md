@@ -47,7 +47,7 @@ description: Конвейер issues — триаж бэклога и довед
 4. **enhancement** → superpowers:brainstorming: мини-дизайн в чате, явное «да» владельца до кода
 5. Реализация через superpowers:test-driven-development; `npm test` — все зелёные
 6. Ветка `issue-N-<короткий-slug>` от main; атомарные коммиты
-7. Запушь ветку: `git push -u fork issue-N-<slug>`, затем PR: `gh pr create -R Erliz/holst-mcp --base main --head issue-N-<slug>`:
+7. Запушь ветку: `git push -u origin issue-N-<slug>`, затем PR: `gh pr create -R Erliz/holst-mcp --base main --head issue-N-<slug>`:
    - тело обязательно содержит `Closes #N`
    - для бага — root cause одним абзацем
    - как проверено: какие тесты, что проверено на живой доске
