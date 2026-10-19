@@ -8,10 +8,12 @@ import {
   buildBoardContentExpr,
   buildStyleFieldsExpr,
   buildNativeStyleUpdateExpr,
+  buildNativeArrowTextExpr,
   buildKindExpr,
   buildArrowLabelsStateExpr,
 } from '../src/eval-scripts.js';
 import { segmentsToSlateNodes } from '../src/text-style.js';
+import { buildArrowTexts } from '../src/arrow-text.js';
 import { randomUUID } from 'node:crypto';
 
 // L2: real eval scripts executed against a fake window.ds + mini-Yjs.
@@ -128,6 +130,99 @@ describe('L2: arrow label verification expr (issue #3)', () => {
     state.window.ds.store.objects.get(arrowId).getTextOnArrowString = () => { throw new Error('boom'); };
     const st2 = await runExpr(buildArrowLabelsStateExpr([arrowId]), state);
     assert.ok(String(st2.result[arrowId].error).includes('boom'));
+  });
+});
+
+describe('L2: native arrow label update via objectsService (issue #7)', () => {
+  // Same seed as the issue #3 block, with a non-default textPosition so
+  // position preservation from the previous label is observable.
+  const makeLabeledArrow = async () => {
+    let state = await runExpr(buildBatchCreationExpr([{
+      kind: 'shape', ref: 'n1', x: 0, y: 0, width: 50, height: 50, shapeType: 'square',
+      fillColor: { color: 0xffffff, opacity: 1 }, strokeColor: { color: 0x202020, opacity: 1 },
+      strokeWidth: 2, fixedSize: true, hasDocument: false,
+    }]));
+    const byIndex = state.byIndex();
+    state = await runExpr(buildBatchArrowsExpr(byIndex, [{
+      arrowType: 'straight', strokeColor: 0x2e5aa8, strokeStyle: 'solid',
+      text: 'link', textPosition: 0.25,
+      from: { refIndex: 0 }, to: { point: { x: 100, y: 100 } },
+    }], false), state);
+    const arrow = state.objectsList().find((o) => o.fields.type === 'arrow');
+    return { state, arrowId: arrow.id };
+  };
+
+  test('routes the label rewrite through objectsService.update; yDoc converges', async () => {
+    const { state, arrowId } = await makeLabeledArrow();
+    state.svcCalls.length = 0;
+    await runExpr(buildNativeArrowTextExpr(arrowId, buildArrowTexts('renamed', 0.5)[0]), state);
+    assert.equal(state.result.ok, true);
+    assert.equal(state.result.native, true);
+    assert.equal(state.result.converged, true);
+    assert.equal(state.svcCalls.length, 1);
+    const patch = state.svcCalls[0].patch;
+    assert.equal(patch.texts.length, 1);
+    assert.equal(patch.texts[0].text, 'renamed');
+    assert.equal(patch.texts[0].position, 0.25, 'position preserved from the previous label');
+    const arrow = state.objectsList().find((o) => o.id === arrowId);
+    assert.equal(arrow.fields.texts[0].text, 'renamed');
+    assert.equal(arrow.fields.texts[0].position, 0.25);
+  });
+
+  test('keeps extra labels beyond the first in the service patch', async () => {
+    const { state, arrowId } = await makeLabeledArrow();
+    const yobj = state.window.ds.yPersistence.yDoc.getMap('objects').get(arrowId);
+    yobj.set('texts', [...yobj.get('texts'), { position: 0.8, id: 'x2', text: 'extra', editor: [] }]);
+    state.svcCalls.length = 0;
+    await runExpr(buildNativeArrowTextExpr(arrowId, buildArrowTexts('renamed', 0.5)[0]), state);
+    assert.equal(state.svcCalls[0].patch.texts.length, 2);
+    assert.equal(state.svcCalls[0].patch.texts[1].text, 'extra');
+    assert.equal(state.result.labels, 2);
+  });
+
+  test('reports native:false when the app service is unavailable', async () => {
+    const { state, arrowId } = await makeLabeledArrow();
+    delete state.window.ds.store.objectBuilder.getApp;
+    await runExpr(buildNativeArrowTextExpr(arrowId, buildArrowTexts('renamed', 0.5)[0]), state);
+    assert.deepEqual(state.result, { native: false });
+  });
+
+  test('waits for debounced yDoc persistence (app save lag)', async () => {
+    const { state, arrowId } = await makeLabeledArrow();
+    const yobj = state.window.ds.yPersistence.yDoc.getMap('objects').get(arrowId);
+    state.window.ds.store.objectBuilder.getApp = () => ({ objectsService: {
+      update: async (id2, patch) => {
+        setTimeout(() => { for (const k of Object.keys(patch)) yobj.set(k, patch[k]); }, 300);
+      },
+    } });
+    const t0 = Date.now();
+    await runExpr(buildNativeArrowTextExpr(arrowId, buildArrowTexts('renamed', 0.5)[0]), state);
+    assert.equal(state.result.converged, true);
+    assert.ok(Date.now() - t0 >= 290, 'must actually wait for persistence');
+    assert.equal(yobj.get('texts')[0].text, 'renamed');
+  });
+
+  test('service paints but persists nothing: converged:false, data not faked', async () => {
+    const { state, arrowId } = await makeLabeledArrow();
+    state.window.ds.store.objectBuilder.getApp = () => ({ objectsService: {
+      update: async () => {}, // paint-only service: persistence never lands
+    } });
+    await runExpr(buildNativeArrowTextExpr(arrowId, buildArrowTexts('renamed', 0.5)[0], { persistDeadlineMs: 100 }), state);
+    assert.equal(state.result.native, true);
+    assert.equal(state.result.converged, false);
+    const yobj = state.window.ds.yPersistence.yDoc.getMap('objects').get(arrowId);
+    assert.equal(yobj.get('texts')[0].text, 'link', 'yDoc untouched by the paint-only service');
+  });
+
+  test('non-arrow or missing object: __error, no service call', async () => {
+    const { state, arrowId } = await makeLabeledArrow();
+    state.svcCalls.length = 0;
+    await runExpr(buildNativeArrowTextExpr('no-such-id', buildArrowTexts('renamed', 0.5)[0]), state);
+    assert.ok(String(state.result.__error).includes('object not found'));
+    const shapeId = state.byIndex()[0].id;
+    await runExpr(buildNativeArrowTextExpr(shapeId, buildArrowTexts('renamed', 0.5)[0]), state);
+    assert.ok(String(state.result.__error).includes('not an arrow'));
+    assert.equal(state.svcCalls.length, 0);
   });
 });
 

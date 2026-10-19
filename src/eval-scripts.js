@@ -430,6 +430,52 @@ export function buildArrowLabelsStateExpr(ids) {
   })()`;
 }
 
+/**
+ * On-arrow label rewrite through the app's own objectsService.update — the
+ * only path that re-renders the MOUNTED arrow live. Raw yDoc `texts` writes
+ * persist fine but the render layer never repaints them until a page reload
+ * (issue #7, verified on app 0.0.7: after a raw write yDoc shows the label
+ * while getTextOnArrowString() keeps returning null; objectsService.update
+ * paints within a second). The service persists to yDoc with a debounce, so
+ * the script polls the doc until the label lands (bounded wait) and reports
+ * converged — the caller raw-writes as a follow-up when it stays false.
+ * The entry arrives Node-side (buildArrowTexts); its position is overridden
+ * in-page from the previous label, and extra labels beyond the first are
+ * preserved. Returns { native: false } when the service is missing (older
+ * builds) — the caller falls back to the raw write.
+ */
+export function buildNativeArrowTextExpr(objectId, entry, { persistDeadlineMs = 1500 } = {}) {
+  return `(async () => {
+    try {
+      const ds = window.ds;
+      const app = ds && ds.store && ds.store.objectBuilder && ds.store.objectBuilder.getApp
+        && ds.store.objectBuilder.getApp();
+      const svc = app && app.objectsService;
+      if (!svc || typeof svc.update !== 'function') return { native: false };
+      const id = ${JSON.stringify(objectId)};
+      const yDoc = ds.yPersistence.yDoc;
+      const obj = yDoc.getMap('objects').get(id);
+      if (!obj || !obj.get) return { __error: 'object not found' };
+      if (obj.get('type') !== 'arrow') return { __error: 'not an arrow' };
+      const prevTexts = obj.get('texts');
+      const prev = Array.isArray(prevTexts) && prevTexts.length ? prevTexts[0] : null;
+      const e = ${JSON.stringify(entry)};
+      e.position = prev && typeof prev.position === 'number' ? prev.position : 0.5;
+      const rest = Array.isArray(prevTexts) ? prevTexts.slice(1) : [];
+      await svc.update(id, { texts: [e, ...rest] });
+      const matches = () => {
+        const stored = yDoc.getMap('objects').get(id).get('texts');
+        return Array.isArray(stored) && stored[0] && stored[0].text === e.text;
+      };
+      const deadline = Date.now() + ${Number(persistDeadlineMs)};
+      while (!matches() && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return { ok: true, native: true, arrow: true, id, text: e.text, labels: 1 + rest.length, converged: matches() };
+    } catch (e) { return { __error: String(e) }; }
+  })()`;
+}
+
 /** Delete many objects in ONE page pass (native objectsService.remove loop). */
 export function buildDeleteObjectsExpr(ids) {
   return `(async () => {

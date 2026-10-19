@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { openHolstSession, listTabs, isBoardUrl, isHolstUrl, getCdpJSON, acquirePooledSession, releaseSession } from './cdp.js';
 import { normalizeDumpColors } from './dump-colors.js';
 import { shapeContent } from './dump-shape.js';
-import { buildCanvasStateExpr, buildCameraFitExpr, buildCameraSetExpr } from './eval-scripts.js';
+import { buildCanvasStateExpr, buildCameraFitExpr, buildCameraSetExpr, buildNativeArrowTextExpr } from './eval-scripts.js';
 import { ensureCdp } from './autostart.js';
 import {
   ValidationError,
@@ -80,9 +80,25 @@ async function resolveDoc(session, objectId) {
  * Rewrite an arrow's label. Arrows keep text in a plain `texts` array
  * (NOT a Y.Text document): [{ position, id, text, editor }]. Replaces the
  * first label, preserving its position and any extra labels beyond the first.
+ * Prefers the app's own objectsService.update — the only path that re-renders
+ * the MOUNTED arrow live; raw yDoc `texts` writes persist but never repaint
+ * until a page reload on app 0.0.7 (issue #7). Falls back to the raw write
+ * on older builds, on service errors, or when the debounced yDoc persist
+ * has not landed (the raw write guarantees the data).
  */
 async function updateArrowText(session, objectId, text) {
   const entry = buildArrowTexts(text, 0.5)[0]; // position re-derived in page from the existing label
+  try {
+    const native = await session.evaluate(
+      buildNativeArrowTextExpr(objectId, entry),
+      { awaitPromise: true }
+    );
+    if (native && !native.__error && native.native === true && native.converged) {
+      return native;
+    }
+  } catch {
+    // fall back to the raw write below
+  }
   const result = await session.evaluate(
     `(() => {
       try {
