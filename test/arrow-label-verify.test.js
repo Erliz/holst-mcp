@@ -24,7 +24,8 @@ function scriptedSession(replies) {
 
 // Identify which expr is which by content (same builders the code uses).
 const isVerifyExpr = (e) => e.includes('getTextOnArrowString');
-const isHealExpr = (e) => e.includes("'texts'") || e.includes('.set(\'texts\'');
+const isNativeHealExpr = (e) => e.includes('objectsService');
+const isRawHealExpr = (e) => e.includes(".set('texts'");
 
 describe('verifyArrowLabelsWithHeal (issue #3 orchestration)', () => {
   test('all labels mounted: ok, no heal round-trips', async () => {
@@ -32,7 +33,7 @@ describe('verifyArrowLabelsWithHeal (issue #3 orchestration)', () => {
     const res = await verifyArrowLabelsWithHeal(s, [{ id: 'a1', text: 'link' }], { healDelayMs: 0 });
     assert.deepEqual(res, { a1: 'ok' });
     assert.equal(s.calls.filter(isVerifyExpr).length, 1);
-    assert.equal(s.calls.filter(isHealExpr).length, 0);
+    assert.equal(s.calls.filter(isRawHealExpr).length, 0);
   });
 
   test('newline-insensitive match passes (paragraph mirror)', async () => {
@@ -42,21 +43,65 @@ describe('verifyArrowLabelsWithHeal (issue #3 orchestration)', () => {
   });
 
   test('label missing in render layer: heals via rewrite, then trusts yDoc if API gone', async () => {
-    // 1st verify: render API present but empty; heal: yDoc write ok; 2nd verify: apiMissing → trust
+    // 1st verify: render API present but empty; native path unavailable (older
+    // build); heal: raw yDoc write ok; 2nd verify: apiMissing → trust
     const s = scriptedSession([
       { 'a1': { str: '' } },                       // verify #1 → fail
-      { ok: true, native: false, arrow: true, id: 'a1', text: 'link', labels: 1 }, // updateArrowText ok
+      { native: false },                           // native heal expr → older build
+      { ok: true, native: false, arrow: true, id: 'a1', text: 'link', labels: 1 }, // raw write ok
       { 'a1': { apiMissing: true } },              // verify #2 → trust yDoc
     ]);
     const res = await verifyArrowLabelsWithHeal(s, [{ id: 'a1', text: 'link' }], { healDelayMs: 0 });
     assert.deepEqual(res, { a1: 'ok' });
-    assert.equal(s.calls.filter(isHealExpr).length, 1);
+    assert.equal(s.calls.filter(isNativeHealExpr).length, 1);
+    assert.equal(s.calls.filter(isRawHealExpr).length, 1);
+  });
+
+  test('heal goes through the app update path when available (issue #7: repaint)', async () => {
+    // verify #1: render empty; heal via objectsService.update: converged;
+    // verify #2: the mounted render layer now shows the label.
+    const s = scriptedSession([
+      { 'a1': { str: '' } },                       // verify #1 → fail
+      { ok: true, native: true, arrow: true, id: 'a1', text: 'link', labels: 1, converged: true },
+      { 'a1': { str: 'link' } },                   // verify #2 → ok
+    ]);
+    const res = await verifyArrowLabelsWithHeal(s, [{ id: 'a1', text: 'link' }], { healDelayMs: 0 });
+    assert.deepEqual(res, { a1: 'ok' });
+    assert.equal(s.calls.filter(isNativeHealExpr).length, 1);
+    assert.equal(s.calls.filter(isRawHealExpr).length, 0, 'no raw write when the service path converges');
+  });
+
+  test('native path paints but yDoc persist lags: raw write guarantees the data', async () => {
+    const s = scriptedSession([
+      { 'a1': { str: '' } },                       // verify #1 → fail
+      { ok: true, native: true, arrow: true, id: 'a1', text: 'link', labels: 1, converged: false },
+      { ok: true, native: false, arrow: true, id: 'a1', text: 'link', labels: 1 }, // raw follow-up
+      { 'a1': { str: 'link' } },                   // verify #2 → ok
+    ]);
+    const res = await verifyArrowLabelsWithHeal(s, [{ id: 'a1', text: 'link' }], { healDelayMs: 0 });
+    assert.deepEqual(res, { a1: 'ok' });
+    assert.equal(s.calls.filter(isNativeHealExpr).length, 1);
+    assert.equal(s.calls.filter(isRawHealExpr).length, 1);
+  });
+
+  test('native expr errors (unmounted arrow): falls back to the raw write', async () => {
+    const s = scriptedSession([
+      { 'a1': { str: '' } },                       // verify #1 → fail
+      { __error: 'service update threw' },         // native heal → error → fallback
+      { ok: true, native: false, arrow: true, id: 'a1', text: 'link', labels: 1 }, // raw write ok
+      { 'a1': { str: 'link' } },                   // verify #2 → ok
+    ]);
+    const res = await verifyArrowLabelsWithHeal(s, [{ id: 'a1', text: 'link' }], { healDelayMs: 0 });
+    assert.deepEqual(res, { a1: 'ok' });
+    assert.equal(s.calls.filter(isNativeHealExpr).length, 1);
+    assert.equal(s.calls.filter(isRawHealExpr).length, 1);
   });
 
   test('heal write fails: arrow reports fail (the textFailedRefs signal)', async () => {
     const s = scriptedSession([
       { 'a1': { str: '' } },          // verify → fail
-      { __error: 'object not found' }, // updateArrowText → throws
+      { __error: 'boom' },            // native heal → error
+      { __error: 'object not found' }, // raw write → throws
     ]);
     const res = await verifyArrowLabelsWithHeal(s, [{ id: 'a1', text: 'link' }], { healDelayMs: 0 });
     assert.deepEqual(res, { a1: 'fail' });
@@ -65,6 +110,7 @@ describe('verifyArrowLabelsWithHeal (issue #3 orchestration)', () => {
   test('heal lands but render API still disagrees: fail', async () => {
     const s = scriptedSession([
       { 'a1': { str: '' } },           // verify #1 → fail
+      { native: false },               // older build → raw heal
       { ok: true, native: false, arrow: true, id: 'a1', text: 'link', labels: 1 }, // heal ok
       { 'a1': { str: 'other' } },      // verify #2 → still wrong
     ]);
@@ -75,7 +121,7 @@ describe('verifyArrowLabelsWithHeal (issue #3 orchestration)', () => {
   test('render API throws: fail (heal attempted)', async () => {
     const s = scriptedSession([
       { 'a1': { error: 'boom' } },     // verify #1 → fail
-      { ok: true, native: false, arrow: true, id: 'a1', text: 'link', labels: 1 },
+      { ok: true, native: true, arrow: true, id: 'a1', text: 'link', labels: 1, converged: true },
       { 'a1': { str: 'link' } },       // verify #2 → ok
     ]);
     const res = await verifyArrowLabelsWithHeal(s, [{ id: 'a1', text: 'link' }], { healDelayMs: 0 });
@@ -99,7 +145,8 @@ describe('verifyArrowLabelsWithHeal (issue #3 orchestration)', () => {
   test('mixed batch: per-arrow states independent', async () => {
     const s = scriptedSession([
       { 'a1': { str: 'one' }, 'a2': { str: '' }, 'a3': { apiMissing: true } },
-      { ok: true, native: false, arrow: true, id: 'a2', text: 'two', labels: 1 }, // heal a2
+      { native: false }, // native heal for a2 → older build
+      { ok: true, native: false, arrow: true, id: 'a2', text: 'two', labels: 1 }, // raw heal a2
       { 'a2': { str: 'two' } }, // re-verify a2
     ]);
     const res = await verifyArrowLabelsWithHeal(s, [
