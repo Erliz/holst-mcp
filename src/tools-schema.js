@@ -345,7 +345,8 @@ export const TOOLS = [
   },
   {
     name: 'holst_resize_object',
-    description: 'Change width and/or height of a shape or sticker.',
+    description:
+      'Change width and/or height of a shape or sticker. For simple-text: width sets the fixed wrap boundary (text re-wraps; height is auto — height is not supported for simple-text).',
     inputSchema: {
       type: 'object',
       properties: {
