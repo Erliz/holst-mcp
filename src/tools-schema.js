@@ -77,7 +77,7 @@ export const TOOLS = [
   {
     name: 'holst_get_board_content',
     description:
-      'Dump of LIVE board content: all objects (with coordinates) + their document texts + non-empty metadata stores. Dead weight is trimmed by default: the delete audit (delete-events-metaStore) and documents of deleted objects are excluded — includeDeleteEvents:true returns the full raw dump (audit view). Size-capped by HOLST_MAX_DUMP_BYTES (default 2MB, applied to the trimmed content) — for big boards use holst_search_text or holst_get_board_summary instead. ' +
+      'Dump of LIVE board content returned as { meta, content }: meta = channel record (id, name, workspace_id, ...; null if unavailable), content.objects = flat live-object map keyed by objectId, content.documents = { docId: plain text }. Dead weight is trimmed by default: the delete audit (delete-events-metaStore) and documents of deleted objects are excluded — includeDeleteEvents:true returns the full raw dump (audit view). Size-capped by HOLST_MAX_DUMP_BYTES (default 2MB, applied to the trimmed content) — for big boards use holst_search_text or holst_get_board_summary instead. ' +
       'Token savers: bbox {x1,y1,x2,y2} returns only overlapping objects; positionsOnly:true returns compact {type,x,y,w,h} without texts. Arrows are included in both: their box is derived from start/end endpoints (attached endpoints resolve to the referenced object; curved arrows are approximated by their endpoint box). ' +
       'Counting: live objects = Object.keys(content.objects) ONLY — never scan the dump for "type" fields (the includeDeleteEvents audit view carries full snapshots of DELETED objects with ordinary type fields). See holst_reference countingRules.',
     inputSchema: {

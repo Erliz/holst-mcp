@@ -59,6 +59,31 @@ describe('getReference', () => {
     assert.match(ref.limits.HOLST_MAX_DUMP_BYTES, /trim/i);
   });
 
+  test('documents the get_board_content response contract (issue #44)', () => {
+    assert.ok(ref.getBoardContent, 'getBoardContent section missing');
+    const gbc = ref.getBoardContent;
+    // envelope first: two conveyor runs crashed on Object.entries(dump.objects)
+    // — objects live at res.content.objects, meta is NOT the board content
+    assert.match(gbc.envelope, /\{ meta, content \}/);
+    assert.match(gbc.envelope, /content\.objects/);
+    assert.match(gbc.envelope, /null/);
+    // objects: flat live-object map; arrows carry no position/width/height
+    assert.match(gbc.objects, /\[objectId\]/);
+    assert.match(gbc.objects, /start\/end/);
+    // documents: docId → plain text, linked via documentId; arrow labels are not docs
+    assert.match(gbc.documents, /\[docId\]/);
+    assert.match(gbc.documents, /documentId/);
+    assert.match(gbc.documents, /texts\[\]/);
+    // other top-level keys: aux stores passthrough + the delete audit default
+    assert.match(gbc.otherKeys, /delete-events-metaStore/);
+    assert.match(gbc.otherKeys, /includeDeleteEvents/);
+    // shaping: bbox filter + the positionsOnly projection shape
+    assert.match(gbc.shaping, /bbox/);
+    assert.match(gbc.shaping, /positionsOnly/);
+    assert.match(gbc.shaping, /\{ objects: /);
+    assert.match(gbc.shaping, /\{type,x,y,w,h\}/);
+  });
+
   test('documents renderer dash derivation — no custom dasharray (issue #40)', async () => {
     // values stay the enum (same source of truth as validators)
     const { STROKE_STYLES } = await import('../src/validate.js');
