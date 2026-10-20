@@ -48,6 +48,14 @@ describe('schema/dispatch consistency (v0.5 regression guard)', () => {
     assert.ok('ids' in t.inputSchema.properties);
   });
 
+  test('resize_object documents simple-text width semantics (issue #9)', () => {
+    const t = byName.get('holst_resize_object');
+    assert.match(t.description, /simple-text/i);
+    assert.match(t.description, /width/i);
+    // height must be explicitly called out as unsupported for simple-text
+    assert.match(t.description, /height (is )?(not|auto)/i);
+  });
+
   test('enum-backed descriptions are GENERATED from validate.js data (no stale tokens)', async () => {
     const { SHAPE_TYPES, ARROW_TYPES, ARROWHEADS, STROKE_STYLES } = await import('../src/validate.js');
     const shape = byName.get('holst_add_shape');

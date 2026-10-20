@@ -1367,35 +1367,75 @@ export async function addStamp(boardId, {
 }
 
 /**
- * Resize an object (shape / sticker).
+ * Resize an object (shape / sticker) or set a simple-text's fixed wrap width
+ * (issue #9). Kind-aware core shared by resizeObject; takes a session so
+ * tests can script the CDP boundary (same pattern as measureTextWithSession).
+ *
+ * simple-text: width is the wrap boundary — written as width + fixedWidth:true
+ * through the app's own objectsService.update (issue #2 lesson: raw style
+ * writes persist but leave the mounted editor stale until reload), with a raw
+ * fallback for older builds. height is auto for simple-text (derived from the
+ * wrap) → rejected. Every other kind keeps the legacy raw width/height path.
  */
-export async function resizeObject(boardId, objectId, { width, height }) {
+export async function resizeObjectWithSession(session, objectId, { width, height } = {}) {
+  assertObjectId(objectId);
+  const kind = await probeKindWithSettle(session, objectId);
+  if (kind === 'simple-text') {
+    if (height !== undefined) {
+      throw new ValidationError(
+        'height is not supported for simple-text — height is auto (text wraps at width)'
+      );
+    }
+    if (width === undefined) throw new ValidationError('width is required for simple-text');
+    width = num(width, 'width', SIZE);
+    let styled = await session.evaluate(
+      buildNativeStyleUpdateExpr(objectId, { width, fixedWidth: true }),
+      { awaitPromise: true }
+    );
+    if (styled?.__error) throw new Error(styled.__error);
+    if (styled?.native !== true) {
+      // older build → raw write of the same fields
+      styled = await session.evaluate(
+        buildStyleFieldsExpr(objectId, { width, fixedWidth: true })
+      );
+      if (styled?.__error) throw new Error(styled.__error);
+      return { ok: true, id: objectId, native: false, width };
+    }
+    return { ok: true, id: objectId, native: true, width };
+  }
+  if (width !== undefined) width = num(width, 'width', SIZE);
+  if (height !== undefined) height = num(height, 'height', SIZE);
+  const result = await session.evaluate(
+    `(() => {
+      try {
+        const yDoc = window.ds.yPersistence.yDoc;
+        const yObjects = yDoc.getMap('objects');
+        const obj = yObjects.get(${JSON.stringify(objectId)});
+        if (!obj || !obj.set) return { __error: 'object not found' };
+        yDoc.transact(() => {
+          ${width ? `obj.set('width', ${Number(width)});` : ''}
+          ${height ? `obj.set('height', ${Number(height)});` : ''}
+          obj.set('updated', { a: 0, t: Date.now() });
+        });
+        return { ok: true, id: ${JSON.stringify(objectId)} };
+      } catch (e) { return { __error: String(e), stack: e.stack }; }
+    })()`
+  );
+  if (result?.__error) throw new Error(result.__error);
+  return result;
+}
+
+/**
+ * Resize an object (shape / sticker) or set a simple-text's fixed wrap
+ * width (issue #9).
+ */
+export async function resizeObject(boardId, objectId, opts = {}) {
   assertBoardId(boardId);
   assertBoardWritable(boardId);
   assertNotReadOnly();
-  assertObjectId(objectId);
-  if (width !== undefined) width = num(width, 'width', SIZE);
-  if (height !== undefined) height = num(height, 'height', SIZE);
   const session = await getBoardSession(boardId);
   try {
-    const result = await session.evaluate(
-      `(() => {
-        try {
-          const yDoc = window.ds.yPersistence.yDoc;
-          const yObjects = yDoc.getMap('objects');
-          const obj = yObjects.get(${JSON.stringify(objectId)});
-          if (!obj || !obj.set) return { __error: 'object not found' };
-          yDoc.transact(() => {
-            ${width ? `obj.set('width', ${Number(width)});` : ''}
-            ${height ? `obj.set('height', ${Number(height)});` : ''}
-            obj.set('updated', { a: 0, t: Date.now() });
-          });
-          return { ok: true, id: ${JSON.stringify(objectId)} };
-        } catch (e) { return { __error: String(e), stack: e.stack }; }
-      })()`
-    );
-    if (result?.__error) throw new Error(result.__error);
-    return result;
+    return await resizeObjectWithSession(session, objectId, opts);
   } finally {
     releaseSession(session);
   }
