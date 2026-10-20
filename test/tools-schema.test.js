@@ -72,6 +72,14 @@ describe('schema/dispatch consistency (v0.5 regression guard)', () => {
     assert.match(t.description, /delete-events/i);
   });
 
+  test('get_board_content documents the trimmed default + audit flag (issue #34)', () => {
+    const t = byName.get('holst_get_board_content');
+    assert.match(t.description, /trim|trimmed|live/i, 'must say the dump is trimmed');
+    assert.match(t.description, /includeDeleteEvents/);
+    const props = t.inputSchema.properties;
+    assert.equal(props.includeDeleteEvents.type, 'boolean');
+  });
+
   test('get_board_summary documents its counting basis (issue #11)', () => {
     const t = byName.get('holst_get_board_summary');
     assert.match(t.description, /content\.objects/);

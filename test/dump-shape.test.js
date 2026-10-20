@@ -5,7 +5,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { arrowBox, shapeContent } from '../src/dump-shape.js';
+import { arrowBox, shapeContent, trimContent } from '../src/dump-shape.js';
 
 const UUID = (n) => `00000000-0000-4000-8000-00000000000${n}`;
 
@@ -111,5 +111,81 @@ describe('shapeContent: passthrough', () => {
     const content = board();
     assert.equal(shapeContent(content, {}), content);
     assert.equal(shapeContent(content), content);
+  });
+});
+
+// Issue #34: the raw yDoc carries dead weight — the delete audit with FULL
+// snapshots of deleted objects (delete-events-metaStore), documents of
+// deleted objects (orphans: 846 docs vs 276 live objects on the test
+// board) and empty auxiliary stores. trimContent removes it so the dump
+// the LLM sees (and the HOLST_MAX_DUMP_BYTES cap measures) is live content.
+describe('trimContent: dead weight removal (issue #34)', () => {
+  const full = () => ({
+    objects: {
+      [UUID(1)]: { type: 'shape', position: { x: 1, y: 1 }, documentId: 'd-live' },
+      [UUID(2)]: { type: 'sticker', position: { x: 2, y: 2 }, documentId: 'd-live-2' },
+      [UUID(3)]: { type: 'frame', position: { x: 3, y: 3 }, labelText: '<p>inline label</p>' }, // no documentId
+    },
+    documents: {
+      'd-live': 'live text',
+      'd-live-2': 'second live text',
+      'd-orphan': 'text of a deleted object',
+      'd-never-attached': 'never referenced by anything',
+    },
+    'delete-events-metaStore': {
+      ev1: { deletedAt: 1, s: [{ type: 'shape', documentId: 'd-orphan', position: { x: 9, y: 9 } }] },
+    },
+    'kanban-columns': {},
+    reactions: {},
+    'task-card-assignments': { t1: { cardId: 'c1' } }, // non-empty aux store = live data
+  });
+
+  test('drops the delete audit store by default', () => {
+    const out = trimContent(full());
+    assert.ok(!('delete-events-metaStore' in out), 'delete audit must not be returned');
+  });
+
+  test('drops empty top-level stores but never objects/documents', () => {
+    const content = full();
+    content.documents = {}; // even when empty, the core keys stay
+    content.objects = {};
+    const out = trimContent(content);
+    assert.ok(!('kanban-columns' in out), 'empty aux store must be dropped');
+    assert.ok(!('reactions' in out), 'empty aux store must be dropped');
+    assert.ok('objects' in out, 'objects is core — never dropped');
+    assert.ok('documents' in out, 'documents is core — never dropped');
+  });
+
+  test('keeps non-empty aux stores (live kanban/reactions data)', () => {
+    const out = trimContent(full());
+    assert.deepEqual(out['task-card-assignments'], { t1: { cardId: 'c1' } });
+  });
+
+  test('keeps only documents referenced by live objects, drops orphans', () => {
+    const out = trimContent(full());
+    assert.deepEqual(Object.keys(out.documents).sort(), ['d-live', 'd-live-2']);
+    assert.equal(out.documents['d-live'], 'live text');
+  });
+
+  test('objects map passes through untouched', () => {
+    const out = trimContent(full());
+    assert.equal(Object.keys(out.objects).length, 3);
+    assert.equal(out.objects[UUID(1)].documentId, 'd-live');
+  });
+
+  test('includeDeleteEvents restores the audit view: delete store + orphan documents', () => {
+    const out = trimContent(full(), { includeDeleteEvents: true });
+    assert.ok('delete-events-metaStore' in out, 'audit view must keep the delete store');
+    assert.equal(out.documents['d-orphan'], 'text of a deleted object');
+    assert.equal(out.documents['d-never-attached'], 'never referenced by anything');
+    assert.ok(!('kanban-columns' in out), 'empty stores are dropped even in audit view');
+  });
+
+  test('does not mutate the input dump', () => {
+    const content = full();
+    trimContent(content);
+    assert.ok('delete-events-metaStore' in content);
+    assert.equal(content.documents['d-orphan'], 'text of a deleted object');
+    assert.ok('reactions' in content);
   });
 });

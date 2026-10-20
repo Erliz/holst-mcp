@@ -77,15 +77,16 @@ export const TOOLS = [
   {
     name: 'holst_get_board_content',
     description:
-      'Full raw dump of a board: all objects (with coordinates) + all document texts. Size-capped by HOLST_MAX_DUMP_BYTES (default 2MB) — for big boards use holst_search_text or holst_get_board_summary instead. ' +
+      'Dump of LIVE board content: all objects (with coordinates) + their document texts + non-empty metadata stores. Dead weight is trimmed by default: the delete audit (delete-events-metaStore) and documents of deleted objects are excluded — includeDeleteEvents:true returns the full raw dump (audit view). Size-capped by HOLST_MAX_DUMP_BYTES (default 2MB, applied to the trimmed content) — for big boards use holst_search_text or holst_get_board_summary instead. ' +
       'Token savers: bbox {x1,y1,x2,y2} returns only overlapping objects; positionsOnly:true returns compact {type,x,y,w,h} without texts. Arrows are included in both: their box is derived from start/end endpoints (attached endpoints resolve to the referenced object; curved arrows are approximated by their endpoint box). ' +
-      'Counting: live objects = Object.keys(content.objects) ONLY — the dump also contains delete-events-metaStore (delete audit with full snapshots of deleted objects) and other metadata stores; do not count "type" fields anywhere else. See holst_reference countingRules.',
+      'Counting: live objects = Object.keys(content.objects) ONLY — never scan the dump for "type" fields (the includeDeleteEvents audit view carries full snapshots of DELETED objects with ordinary type fields). See holst_reference countingRules.',
     inputSchema: {
       type: 'object',
       properties: {
         boardId: { type: 'string', description: 'UUID board id' },
         bbox: { type: 'object', description: '{ x1, y1, x2, y2 } board coords — only overlapping objects returned' },
         positionsOnly: { type: 'boolean', description: 'Compact {type,x,y,w,h} per object, no document texts' },
+        includeDeleteEvents: { type: 'boolean', description: 'Audit view: return the full raw dump — delete-events-metaStore (delete audit with full snapshots of deleted objects) + all documents incl. orphans. Default false (live content only)' },
       },
       required: ['boardId'],
       additionalProperties: false,
@@ -466,7 +467,7 @@ export const DISPATCH = {
   holst_reference: (args) => getReference(),
   holst_list_boards: (args) => listBoards(),
   holst_batch_create: (args) => batchCreate(args.boardId, args.objects, args.options || {}),
-  holst_get_board_content: (args) => getBoardContent(args.boardId, { bbox: args.bbox, positionsOnly: args.positionsOnly }),
+  holst_get_board_content: (args) => getBoardContent(args.boardId, { bbox: args.bbox, positionsOnly: args.positionsOnly, includeDeleteEvents: args.includeDeleteEvents }),
   holst_get_board_summary: (args) => getBoardSummary(args.boardId),
   holst_search_text: (args) => searchBoardText(args.boardId, args.query),
   holst_measure_text: (args) => measureText(args.boardId, args),

@@ -3,7 +3,7 @@
 import { randomUUID } from 'node:crypto';
 import { openHolstSession, listTabs, isBoardUrl, isHolstUrl, getCdpJSON, acquirePooledSession, releaseSession } from './cdp.js';
 import { normalizeDumpColors } from './dump-colors.js';
-import { shapeContent } from './dump-shape.js';
+import { shapeContent, trimContent } from './dump-shape.js';
 import { buildCanvasStateExpr, buildCameraFitExpr, buildCameraSetExpr, buildNativeArrowTextExpr } from './eval-scripts.js';
 import { ensureCdp } from './autostart.js';
 import {
@@ -318,7 +318,7 @@ export async function listBoards() {
 export async function getBoardContent(boardId, opts = {}) {
   assertBoardId(boardId);
   assertBoardReadable(boardId);
-  const { bbox, positionsOnly } = opts;
+  const { bbox, positionsOnly, includeDeleteEvents } = opts;
   if (bbox !== undefined) {
     for (const k of ['x1', 'y1', 'x2', 'y2']) num(bbox[k], `bbox.${k}`);
     if (!(bbox.x2 > bbox.x1 && bbox.y2 > bbox.y1)) {
@@ -332,16 +332,29 @@ export async function getBoardContent(boardId, opts = {}) {
       buildBoardContentExpr()
     );
     if (yjson?.__error) throw new Error(yjson.__error);
-    let content = limitDump(yjson);
-    // MCP-written ints read back as the same hex the caller sent (#RRGGBB).
-    // UI-written palette names pass through (map: docs/palette.md).
-    normalizeDumpColors(content);
-    // Response shaping — saves LLM tokens; the CDP dump stays complete.
-    content = shapeContent(content, { bbox, positionsOnly });
+    const content = finalizeBoardDump(yjson, { bbox, positionsOnly, includeDeleteEvents });
     return { meta, content };
   } finally {
     releaseSession(session);
   }
+}
+
+/**
+ * Post-process a raw yDoc dump into the returned board content (issue #34):
+ * trim dead weight (delete audit, empty stores, orphaned documents) BEFORE
+ * the size cap — HOLST_MAX_DUMP_BYTES must measure what the client actually
+ * receives, not the delete history. Then normalize colors and apply
+ * bbox/positionsOnly shaping. Split out of getBoardContent as a pure
+ * pipeline so the ordering (trim → cap) is unit-testable.
+ */
+export function finalizeBoardDump(yjson, { bbox, positionsOnly, includeDeleteEvents } = {}) {
+  let content = trimContent(yjson, { includeDeleteEvents });
+  content = limitDump(content);
+  // MCP-written ints read back as the same hex the caller sent (#RRGGBB).
+  // UI-written palette names pass through (map: docs/palette.md).
+  normalizeDumpColors(content);
+  // Response shaping — saves LLM tokens; the CDP dump stays complete.
+  return shapeContent(content, { bbox, positionsOnly });
 }
 
 /**
