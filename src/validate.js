@@ -303,6 +303,9 @@ export function assertArrowType(value, name, opts = {}) {
 /**
  * Arrow endpoint: either a free point { x, y } or an attachment
  * { objectId, relativePoint?: { x, y } }. All coordinates must be finite.
+ * Returns the endpoint normalized for the write path; control (issue #41:
+ * port sides, object-endpoint-only — a free point has no box edge to pin)
+ * is mapped from its side name to the app's numeric code.
  */
 export function assertArrowEndpoint(ep, name) {
   if (ep === null || typeof ep !== 'object' || Array.isArray(ep)) {
@@ -310,17 +313,42 @@ export function assertArrowEndpoint(ep, name) {
   }
   if (ep.objectId !== undefined) {
     assertObjectId(ep.objectId);
+    const out = { objectId: ep.objectId };
     if (ep.relativePoint !== undefined) {
       if (ep.relativePoint === null || typeof ep.relativePoint !== 'object') {
         fail(`${name}.relativePoint must be an object { x, y }`);
       }
-      num(ep.relativePoint.x, `${name}.relativePoint.x`);
-      num(ep.relativePoint.y, `${name}.relativePoint.y`);
+      out.relativePoint = {
+        x: num(ep.relativePoint.x, `${name}.relativePoint.x`),
+        y: num(ep.relativePoint.y, `${name}.relativePoint.y`),
+      };
     }
-    return;
+    const control = assertEndpointControl(ep.control, `${name}.control`);
+    if (control !== undefined) out.control = control;
+    return out;
   }
-  num(ep.x, `${name}.x`);
-  num(ep.y, `${name}.y`);
+  if (ep.control !== undefined) {
+    fail(`${name}.control is only valid on object endpoints ({ objectId } attachments), not free points { x, y }`);
+  }
+  return {
+    x: num(ep.x, `${name}.x`),
+    y: num(ep.y, `${name}.y`),
+  };
+}
+
+/**
+ * Port control (issue #41): pins the side an attached arrow leaves from.
+ * The app stores numeric side codes on each endpoint (verified live,
+ * evidence in the type-switch comment on #39): 1=top, 2=right, 3=bottom,
+ * 4=left. The MCP API names the sides; this maps a name to the stored code.
+ */
+export function assertEndpointControl(value, name) {
+  if (value === undefined) return undefined;
+  const SIDES = { top: 1, right: 2, bottom: 3, left: 4 };
+  if (typeof value !== 'string' || !(value in SIDES)) {
+    fail(`${name} must be one of top, right, bottom, left, got: ${typeof value === 'string' ? JSON.stringify(value.slice(0, 64)) : typeof value}`);
+  }
+  return SIDES[value];
 }
 
 /**

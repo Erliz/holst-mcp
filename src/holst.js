@@ -1057,7 +1057,9 @@ export async function addSimpleText(boardId, {
 /**
  * Add an arrow connecting two points. Each endpoint can either be a free point {x, y}
  * or attached to an object: { objectId, relativePoint: {x, y} } where relativePoint
- * is normalized 0..1 within the object's bounds.
+ * is normalized 0..1 within the object's bounds. Object endpoints also accept
+ * control: 'top'|'right'|'bottom'|'left' (issue #41 port control) — pins the side
+ * the arrow leaves from; mapped to the app's endpoint side codes (1..4).
  * Optional `text` lands as an on-arrow label (plain `texts` field, position 0..1
  * along the path). strokeStyle: solid (default, stored as absent), dashed, dotted.
  * midwayControls (issue #39): absolute [{x, y}] points the app routes the arrow
@@ -1082,8 +1084,8 @@ export async function addArrow(boardId, {
   assertBoardId(boardId);
   assertBoardWritable(boardId);
   assertNotReadOnly();
-  assertArrowEndpoint(start, 'start');
-  assertArrowEndpoint(end, 'end');
+  start = assertArrowEndpoint(start, 'start'); // normalized: control side name → app code (#41)
+  end = assertArrowEndpoint(end, 'end');
   arrowType = assertArrowType(arrowType, 'arrowType', { default: 'elbow' });
   strokeColor = parseColor(strokeColor, 'strokeColor', { default: '#808080' });
   strokeStyle = assertStrokeStyle(strokeStyle, 'strokeStyle', { default: 'solid' });

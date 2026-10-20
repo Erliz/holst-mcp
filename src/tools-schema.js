@@ -146,8 +146,8 @@ export const TOOLS = [
     description:
       'Create a whole diagram in ONE call — 10-15x faster than sequential add_* tools (30 objects in ~15s instead of minutes). ' +
       'objects: array of { kind: "shape"|"sticker"|"simple-text"|"frame"|"stamp", ref?: "name", text?, x, y, ...options } plus ' +
-      '{ kind: "arrow", from: { ref, relativePoint? }|{ x, y }, to: ..., text?, textPosition?, strokeStyle?, arrowheadStart?, arrowheadEnd?, strokeWidth?, midwayControls?: [{x, y}, ...], elbowMidwayControls?: [{x: V, y: null}|{x: null, y: H}, ...] } — ' +
-      'arrows support on-arrow labels, dashed/dotted styles, headless variants (arrowhead*: "none") and geometry shaping (midwayControls = free points on curved, elbowMidwayControls = corridor lines on elbow). ' +
+      '{ kind: "arrow", from: { ref, relativePoint?, control? }|{ x, y }, to: ..., text?, textPosition?, strokeStyle?, arrowheadStart?, arrowheadEnd?, strokeWidth?, midwayControls?: [{x, y}, ...], elbowMidwayControls?: [{x: V, y: null}|{x: null, y: H}, ...] } — ' +
+      'arrows support on-arrow labels, dashed/dotted styles, headless variants (arrowhead*: "none"), geometry shaping (midwayControls = free points on curved, elbowMidwayControls = corridor lines on elbow) and port control (endpoint control: top|right|bottom|left pins the exit side). ' +
       'Text objects support typography: fontSize, textColor (#RRGGBB ok), horizontalAlign, bold/italic/underline/strikethrough. ' +
       'options.arrowsBehind: true places arrows BELOW the nodes (design-system layering). ' +
       'ref is a local name (letters/digits/dash/_); arrows link refs instead of UUIDs; refs auto-generate when omitted. ' +
@@ -300,7 +300,7 @@ export const TOOLS = [
   {
     name: 'holst_add_arrow',
     description:
-      'Connect two points or objects. Endpoint = { x, y } for a free point, or { objectId, relativePoint: { x, y } } to attach (0..1 of object bounds; 0.5/1 = bottom center). Create endpoint objects FIRST — you need their ids. ' +
+      'Connect two points or objects. Endpoint = { x, y } for a free point, or { objectId, relativePoint: { x, y } } to attach (0..1 of object bounds; 0.5/1 = bottom center); object endpoints also take optional control: top|right|bottom|left — pins the side the arrow leaves from (port control). Create endpoint objects FIRST — you need their ids. ' +
       'Optional text = on-arrow label; textPosition 0..1 places it along the path (default middle). ' +
       'midwayControls: [{x, y}, ...] absolute points the arrow routes through — bend the geometry freely (verified on curved arrows); elbowMidwayControls: corridor lines for elbow arrows — both visible in get_board_content. ' +
       'arrowheadStart/arrowheadEnd: none | miro | arc | figma (absent = default: no start head, standard end head; "none" disables). ' +
@@ -311,11 +311,11 @@ export const TOOLS = [
         boardId: { type: 'string' },
         start: {
           type: 'object',
-          description: '{ x, y } or { objectId, relativePoint: {x, y} }',
+          description: '{ x, y } or { objectId, relativePoint: {x, y}, control?: top|right|bottom|left } — control pins the exit side (object endpoints only)',
         },
         end: {
           type: 'object',
-          description: '{ x, y } or { objectId, relativePoint: {x, y} }',
+          description: '{ x, y } or { objectId, relativePoint: {x, y}, control?: top|right|bottom|left } — control pins the exit side (object endpoints only)',
         },
         arrowType: { type: 'string', default: 'elbow', description: 'elbow, straight, curved' },
         strokeColor: { type: 'string', default: '#808080', description: '#RRGGBB hex' },
