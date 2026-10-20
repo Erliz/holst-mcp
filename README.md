@@ -7,6 +7,7 @@ MCP-сервер для чтения и записи досок [Holst.so](https
 [![CI](https://img.shields.io/github/actions/workflow/status/Erliz/holst-mcp/ci.yml?style=flat-square&label=CI)](https://github.com/Erliz/holst-mcp/actions/workflows/ci.yml)
 [![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A520.10-3c873a?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![MCP](https://img.shields.io/badge/MCP-server-5ed9c7?style=flat-square)](https://modelcontextprotocol.io)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](./LICENSE)
 
 [Обзор](#обзор) • [Возможности](#возможности) • [Установка](#установка) • [Конфигурация](#конфигурация) • [Безопасность](#безопасность) • [Troubleshooting](#troubleshooting) • [Разработка](#разработка)
 
