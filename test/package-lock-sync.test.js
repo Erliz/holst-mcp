@@ -40,4 +40,12 @@ describe('package-lock.json mirrors package.json root metadata (#27)', () => {
       `packages[""].engines ${JSON.stringify(lock.packages[''].engines)} != package.json ${JSON.stringify(pkg.engines)}: run npm install and commit package-lock.json`
     );
   });
+
+  test('lockfile license matches package.json license (#53)', () => {
+    assert.equal(
+      lock.packages[''].license,
+      pkg.license,
+      `packages[""].license ${JSON.stringify(lock.packages[''].license)} != package.json ${JSON.stringify(pkg.license)}: run npm install and commit package-lock.json`
+    );
+  });
 });
