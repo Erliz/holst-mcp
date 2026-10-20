@@ -56,8 +56,8 @@ export function getReference() {
     zOrder: 'zIndex field; batch options.arrowsBehind: true places connectors BELOW the created nodes (design-system layering). After-creation control: holst_set_z_order — placement front (above everything) / back (below everything, frames included) or absolute zIndex; current values are visible in holst_get_board_content',
     countingRules: {
       liveObjects: 'the ONLY source of live-object counts is the flat content.objects map (get_board_content / get_board_summary / holst_search_text all count exactly its keys — count Object.keys(content.objects), never scan the whole dump for "type" fields)',
-      rawDump: 'get_board_content returns the whole yDoc, not just objects: delete-events-metaStore is the app delete audit — every entry carries full snapshots (s[]) of DELETED objects with ordinary type fields, so a naive type-scan counts deleted objects as live (2 live frames + 5 deleted snapshots = "7 frames"). kanban-*/reactions/task-card-* stores are auxiliary and usually empty. Count ONLY content.objects; treat everything else as history/metadata',
-      documents: 'content.documents may contain orphaned docs whose objects were deleted — documents count ≠ objects count (docs are never cleaned up on delete)',
+      rawDump: 'get_board_content trims dead weight by default: delete-events-metaStore (the app delete audit — every entry carries full snapshots s[] of DELETED objects with ordinary type fields) and documents of deleted objects are NOT returned; empty auxiliary stores (kanban, reactions, task-card families) are dropped. includeDeleteEvents:true restores the full raw yDoc for audit reads. Counting is unaffected either way: a naive type-scan over the delete audit counts deleted objects as live (2 live frames + 5 deleted snapshots = "7 frames") — count ONLY content.objects; treat everything beyond it as history/metadata',
+      documents: 'content.documents is trimmed by default to docs referenced by live objects (documentId); includeDeleteEvents:true returns orphaned docs of deleted objects too — in that audit view documents count ≠ objects count (docs are never cleaned up on delete)',
       summary: 'holst_get_board_summary «Объектов» = ALL live objects in content.objects (any type, including empty-text ones); sub-counts «стикеров»/«секций»/«текстовых меток» include ONLY objects with non-empty text; «стрелок» = all arrows; frames and stamps appear only in «Объектов» (frames also listed in the Фреймы section, arrows in Стрелки) — sub-counts intentionally do NOT sum to «Объектов»',
     },
     arrowLabels: {
@@ -89,7 +89,7 @@ export function getReference() {
       HOLST_RW_BOARD_IDS: 'comma/space-separated UUIDs with full read+write access; when set (together with RO or alone), boards outside both lists are refused',
       HOLST_RO_BOARD_IDS: 'comma/space-separated UUIDs, read-only: readable but every mutating tool is refused; RO wins if an id is in both lists (fail-closed)',
       HOLST_READ_ONLY: '1|true — global master switch, blocks every mutating tool on ALL boards',
-      HOLST_MAX_DUMP_BYTES: 'default 2000000 — holst_get_board_content refuses bigger dumps; use holst_search_text',
+      HOLST_MAX_DUMP_BYTES: 'default 2000000 — holst_get_board_content refuses bigger dumps (measured on the trimmed content); use holst_search_text',
       HOLST_DEBUG_PORT: 'default 9222 — CDP port, must match the app launch flag',
     },
     limits: {
@@ -100,6 +100,7 @@ export function getReference() {
       sizeMax: 1e6,
       boardId: 'strict UUID only',
       objectId: 'charset [A-Za-z0-9_-], ≤128 chars',
+      HOLST_MAX_DUMP_BYTES: 'default 2000000 — cap for holst_get_board_content, measured on the TRIMMED dump (delete audit + orphan docs + empty stores cut before the check); use holst_search_text beyond it',
     },
     verificationPattern: [
       '1. create objects (add_shape / add_sticker / add_simple_text / add_arrow / add_frame)',

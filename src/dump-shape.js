@@ -64,3 +64,49 @@ export function shapeContent(content, { bbox, positionsOnly } = {}) {
   }
   return positionsOnly ? { objects } : { ...content, objects };
 }
+
+// The delete audit map name in the Holst yDoc: every entry carries FULL
+// snapshots (s[]) of deleted objects — never trimmed by the app, never
+// useful for reading the board (issue #34: 56% of raw dump bytes).
+const DELETE_EVENTS_STORE = 'delete-events-metaStore';
+
+function dropEmptyStores(out) {
+  for (const k of Object.keys(out)) {
+    if (k === 'objects' || k === 'documents') continue;
+    const v = out[k];
+    if (v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === 0) {
+      delete out[k];
+    }
+  }
+  return out;
+}
+
+/**
+ * Remove dead weight from a raw board dump (issue #34):
+ * - delete-events-metaStore (the app delete audit) — always dropped;
+ * - empty top-level stores (aux kanban, reactions, task-card families and
+ *   whatever the app adds next) — dropped, objects/documents exempt;
+ * - documents referenced by no live object (orphans of deleted objects)
+ *   — dropped.
+ * includeDeleteEvents: true restores the audit view: the delete store and
+ * all documents are kept as-is (empty stores are still dropped).
+ * Pure: returns a new object, never mutates the input.
+ */
+export function trimContent(content, { includeDeleteEvents } = {}) {
+  const out = { ...content };
+  dropEmptyStores(out);
+  if (includeDeleteEvents) return out;
+  delete out[DELETE_EVENTS_STORE];
+  if (out.documents) {
+    const referenced = new Set();
+    for (const o of Object.values(content.objects || {})) {
+      if (o && typeof o.documentId === 'string' && o.documentId) referenced.add(o.documentId);
+    }
+    const kept = {};
+    for (const [id, text] of Object.entries(out.documents)) {
+      if (referenced.has(id)) kept[id] = text;
+    }
+    out.documents = kept;
+  }
+  return out;
+}
