@@ -230,6 +230,73 @@ export function buildNativeStyleUpdateExpr(objectId, styleExtras = {}, deleteFie
   })()`;
 }
 
+/**
+ * Z-order update on an EXISTING object (issue #10): layer order is the plain
+ * `zIndex` object field. Two modes, both one page pass:
+ * - absolute: spec.zIndex written as-is (same vocabulary as batch entries);
+ * - placement front/back: computed in-page from the z landscape with the
+ *   TARGET EXCLUDED from the scan (front = othersMax+1, back = othersMin-1;
+ *   already-top object stays at the same value — no drift on repeats; empty
+ *   landscape → 0).
+ * Write path: the app's own objectsService.update — the only path that
+ * re-renders the MOUNTED editor live (issue #2: raw style writes persist but
+ * the mounted view keeps the stale order until reload) — with an in-page raw
+ * transact fallback for older builds. The convergence poll waits for the
+ * debounced yDoc persistence (same budget as buildNativeStyleUpdateExpr).
+ */
+export function buildSetZOrderExpr(objectId, { zIndex, placement } = {}) {
+  const spec = { id: objectId };
+  if (zIndex !== undefined) spec.zIndex = Number(zIndex);
+  if (placement !== undefined) spec.placement = placement;
+  return `(async () => {
+    try {
+      const spec = ${JSON.stringify(spec)};
+      const ds = window.ds;
+      const yDoc = ds.yPersistence.yDoc;
+      const yObjects = yDoc.getMap('objects');
+      const obj = yObjects.get(spec.id);
+      if (!obj || !obj.get) return { __error: 'object not found: ' + spec.id };
+      let z;
+      if (spec.zIndex !== undefined) {
+        z = spec.zIndex;
+      } else {
+        let maxZ = -Infinity, minZ = Infinity;
+        for (const [k, v] of yObjects.entries()) {
+          if (k === spec.id) continue;
+          const zz = v && v.get ? v.get('zIndex') : null;
+          if (typeof zz !== 'number') continue;
+          if (zz > maxZ) maxZ = zz;
+          if (zz < minZ) minZ = zz;
+        }
+        if (maxZ === -Infinity) z = 0;
+        else z = spec.placement === 'front' ? maxZ + 1 : minZ - 1;
+      }
+      const app = ds.store && ds.store.objectBuilder && ds.store.objectBuilder.getApp
+        && ds.store.objectBuilder.getApp();
+      const svc = app && app.objectsService;
+      if (svc && typeof svc.update === 'function') {
+        await svc.update(spec.id, { zIndex: z });
+        const matches = () => {
+          const o = yObjects.get(spec.id);
+          return !!(o && o.get && o.get('zIndex') === z);
+        };
+        const deadline = Date.now() + 1500;
+        while (!matches() && Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 100));
+        }
+        return { ok: true, native: true, zIndex: z, converged: matches() };
+      }
+      // older build → raw write (persists; the mounted view may keep the
+      // stale order until reload — issue #2)
+      yDoc.transact(() => {
+        obj.set('zIndex', z);
+        obj.set('updated', { a: 0, t: Date.now() });
+      });
+      return { ok: true, native: false, zIndex: z };
+    } catch (e) { return { __error: String(e) }; }
+  })()`;
+}
+
 /** Create a simple-text object (typed via T in UI). */
 export function buildAddSimpleTextExpr({ x, y, width, styleExtras = {} }) {
   fin(x, 'x'); fin(y, 'y');

@@ -20,6 +20,7 @@ import {
   assertArrowType,
   assertOpacity,
   assertBorderRadius,
+  assertZPlacement,
   parseColor,
   num,
   safeToken,
@@ -37,6 +38,7 @@ import {
   buildTouchUpdatedExpr,
   buildStyleFieldsExpr,
   buildNativeStyleUpdateExpr,
+  buildSetZOrderExpr,
   buildAddSimpleTextExpr,
   buildBatchCreationExpr,
   buildBatchArrowsExpr,
@@ -1436,6 +1438,47 @@ export async function resizeObject(boardId, objectId, opts = {}) {
   const session = await getBoardSession(boardId);
   try {
     return await resizeObjectWithSession(session, objectId, opts);
+  } finally {
+    releaseSession(session);
+  }
+}
+
+/**
+ * Change the layer order of an EXISTING object (issue #10): zIndex is a plain
+ * object field, so until now the only fix for wrong layering was delete +
+ * recreate. Takes a session so tests can script the CDP boundary (same
+ * pattern as resizeObjectWithSession). Params — exactly one of:
+ * - zIndex: absolute value, same range/vocabulary as batch entries (-1e7..1e7)
+ * - placement: 'front' (above everything) | 'back' (below everything,
+ *   frames included) — computed in-page from the current z landscape
+ * zIndex is universal across kinds (shape / sticker / simple-text / frame /
+ * stamp / arrow) — no kind-specific handling, the probe only asserts the
+ * object is addressable.
+ */
+export async function setZOrderWithSession(session, objectId, { zIndex, placement } = {}) {
+  assertObjectId(objectId);
+  if ((zIndex === undefined) === (placement === undefined)) {
+    throw new ValidationError('pass exactly one of zIndex (absolute) or placement (front|back)');
+  }
+  if (zIndex !== undefined) zIndex = num(zIndex, 'zIndex', { min: -1e7, max: 1e7 });
+  assertZPlacement(placement, 'placement');
+  await probeKindWithSettle(session, objectId);
+  const result = await session.evaluate(
+    buildSetZOrderExpr(objectId, { zIndex, placement }),
+    { awaitPromise: true }
+  );
+  if (result?.__error) throw new Error(result.__error);
+  return result;
+}
+
+/** Change the layer order of an existing object (issue #10). */
+export async function setZOrder(boardId, objectId, opts = {}) {
+  assertBoardId(boardId);
+  assertBoardWritable(boardId);
+  assertNotReadOnly();
+  const session = await getBoardSession(boardId);
+  try {
+    return await setZOrderWithSession(session, objectId, opts);
   } finally {
     releaseSession(session);
   }
