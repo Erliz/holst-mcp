@@ -66,6 +66,17 @@ describe('schema/dispatch consistency (v0.5 regression guard)', () => {
     assert.deepEqual(props.placement.enum, ['front', 'back']);
   });
 
+  test('get_board_content documents what counts as a live object (issue #11)', () => {
+    const t = byName.get('holst_get_board_content');
+    assert.match(t.description, /content\.objects/);
+    assert.match(t.description, /delete-events/i);
+  });
+
+  test('get_board_summary documents its counting basis (issue #11)', () => {
+    const t = byName.get('holst_get_board_summary');
+    assert.match(t.description, /content\.objects/);
+  });
+
   test('enum-backed descriptions are GENERATED from validate.js data (no stale tokens)', async () => {
     const { SHAPE_TYPES, ARROW_TYPES, ARROWHEADS, STROKE_STYLES } = await import('../src/validate.js');
     const shape = byName.get('holst_add_shape');

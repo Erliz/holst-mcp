@@ -78,7 +78,8 @@ export const TOOLS = [
     name: 'holst_get_board_content',
     description:
       'Full raw dump of a board: all objects (with coordinates) + all document texts. Size-capped by HOLST_MAX_DUMP_BYTES (default 2MB) — for big boards use holst_search_text or holst_get_board_summary instead. ' +
-      'Token savers: bbox {x1,y1,x2,y2} returns only overlapping objects; positionsOnly:true returns compact {type,x,y,w,h} without texts. Arrows are included in both: their box is derived from start/end endpoints (attached endpoints resolve to the referenced object; curved arrows are approximated by their endpoint box).',
+      'Token savers: bbox {x1,y1,x2,y2} returns only overlapping objects; positionsOnly:true returns compact {type,x,y,w,h} without texts. Arrows are included in both: their box is derived from start/end endpoints (attached endpoints resolve to the referenced object; curved arrows are approximated by their endpoint box). ' +
+      'Counting: live objects = Object.keys(content.objects) ONLY — the dump also contains delete-events-metaStore (delete audit with full snapshots of deleted objects) and other metadata stores; do not count "type" fields anywhere else. See holst_reference countingRules.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -93,7 +94,8 @@ export const TOOLS = [
   {
     name: 'holst_get_board_summary',
     description:
-      'Structured markdown of a board: stickers grouped under nearest section headers. The preferred way to read a board and to VERIFY your own changes (every block must show its text).',
+      'Structured markdown of a board: stickers grouped under nearest section headers. The preferred way to read a board and to VERIFY your own changes (every block must show its text). ' +
+      'Counts live objects from content.objects only; sub-counts (stickers/sections/text labels) exclude empty-text objects — exact rules: holst_reference countingRules.',
     inputSchema: {
       type: 'object',
       properties: {
