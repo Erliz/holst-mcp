@@ -173,6 +173,15 @@
   ждёт сходимости ≤1.5s). Для стикеров `fontSize` отвергается с тем же сообщением,
   что и в `batch_create` (нет проверенной px-базы — используйте `textScale`).
 
+### Безопасность
+- Закрыты обе уязвимости из `npm audit` (#29): `@modelcontextprotocol/sdk`
+  1.29.0 → 1.32.1 (high, GHSA-6qxp-vccf-f47h — OAuth-клиент мог отправить
+  креды на сервер авторизации, выбранный MCP-сервером) и транзитивный
+  `proxy-addr` 2.0.7 → 2.0.8 через sdk → express (critical,
+  GHSA-jqcg-44mw-7w3h — IP-spoofing через IPv4-mapped IPv6 trust subnet).
+  Обе уязвимые поверхности в проекте не используются (stdio-транспорт,
+  без OAuth-клиента и express), дифф — только package-lock.json.
+
 ### Документировано (поведение, а не изменения)
 - Правила подсчёта объектов (#11): `holst_get_board_summary` и сырой
   `holst_get_board_content` расходились в счёте («Фреймы (2)» против 7 в дампе,
