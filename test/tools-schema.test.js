@@ -87,6 +87,10 @@ describe('schema/dispatch consistency (v0.5 regression guard)', () => {
     assert.ok('positionsOnly' in props, 'positionsOnly missing');
   });
 
+  test('update_text documents preserving arrow label position and side (issue #63)', () => {
+    assert.match(byName.get('holst_update_text').description, /keeping its position and side/);
+  });
+
   test('delete_objects documents the ids naming (objectId alias wording)', () => {
     const t = byName.get('holst_delete_objects');
     assert.match(t.description, /object ids/i);

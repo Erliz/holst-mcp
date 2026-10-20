@@ -84,6 +84,10 @@ describe('getReference', () => {
     assert.match(gbc.shaping, /\{type,x,y,w,h\}/);
   });
 
+  test('documents update_text preserving arrow label position and side (issue #63)', () => {
+    assert.match(ref.arrowLabels.how, /holst_update_text.*preserving its position and side/);
+  });
+
   test('documents measure_text — rendered metrics before creating objects (issue #58)', () => {
     assert.ok(ref.measureText, 'measureText section missing');
     const mt = ref.measureText;

@@ -197,7 +197,7 @@ export const TOOLS = [
   {
     name: 'holst_update_text',
     description:
-      'Replace the text of an existing object (sticker / shape / simple-text / arrow label). Pass plain `text` OR run-level `runs` (not both). Optional style params: fontSize, textScale, textColor, horizontalAlign, bold/italic/underline/strikethrough. Arrows: rewrites the on-arrow label, keeping its position. Multiline: \\n = new paragraph. Idempotent — safe to retry once. Internally settles through the post-reload page-sync window, so freshly created objects stay addressable; a genuine object not found surfaces only after a ~6s budget. Takes 2-6s.',
+      'Replace the text of an existing object (sticker / shape / simple-text / arrow label). Pass plain `text` OR run-level `runs` (not both). Optional style params: fontSize, textScale, textColor, horizontalAlign, bold/italic/underline/strikethrough. Arrows: rewrites the on-arrow label, keeping its position and side. Multiline: \\n = new paragraph. Idempotent — safe to retry once. Internally settles through the post-reload page-sync window, so freshly created objects stay addressable; a genuine object not found surfaces only after a ~6s budget. Takes 2-6s.',
     inputSchema: {
       type: 'object',
       properties: {

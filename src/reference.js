@@ -90,7 +90,7 @@ export function getReference() {
       summary: 'holst_get_board_summary «Объектов» = ALL live objects in content.objects (any type, including empty-text ones); sub-counts «стикеров»/«секций»/«текстовых меток» include ONLY objects with non-empty text; «стрелок» = all arrows; frames and stamps appear only in «Объектов» (frames also listed in the Фреймы section, arrows in Стрелки) — sub-counts intentionally do NOT sum to «Объектов»',
     },
     arrowLabels: {
-      how: 'add_arrow / batch arrow entry: text + textPosition (0..1 along the path, 0 = start, 0.5 = middle, 1 = end); update later via holst_update_text on the arrow id',
+      how: 'add_arrow / batch arrow entry: text + textPosition (0..1 along the path, 0 = start, 0.5 = middle, 1 = end); update later via holst_update_text on the arrow id, preserving its position and side',
       side: 'labelSide: on (default — label on the line, the renderer masks the stroke behind it) | left | right — beside the segment with the app\'s fixed 7px gap. Screen-side semantics: right = the +x side of the segment (below for horizontal segments, left = above). The side is stored as a signed anchor relative to the LOCAL segment direction and resolved against the rendered geometry after mount (result field sideOk / sideFailedRefs); moving endpoints later may re-side the label',
       rotation: 'textRotated: true rotates the label to follow the arrow direction (object-level field, works for the whole label)',
       limits: 'no background color on arrow labels (the app renders none — the on-line mask is automatic); whole-label color only (textColor); multiple labels per arrow exist in the model but the API writes one',
