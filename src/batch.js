@@ -2,7 +2,7 @@
 // shared validators, assigns refs, orders creations before arrows, and
 // resolves arrow ref-endpoints to creation indexes. Pure — no side effects.
 
-import { ValidationError, assertText, assertNoMarkdown, num, safeToken, assertStrokeStyle, assertOpacity, assertBorderRadius, assertRuns, assertShapeType, assertArrowType, assertObjectId, parseColor, assertArrowhead, assertBackgroundStyle, assertMidwayControls, assertElbowMidwayControls, assertEndpointControl } from './validate.js';
+import { ValidationError, assertText, assertNoMarkdown, num, safeToken, assertStrokeStyle, assertOpacity, assertBorderRadius, assertRuns, assertShapeType, assertArrowType, assertObjectId, parseColor, assertArrowhead, assertBackgroundStyle, assertMidwayControls, assertElbowMidwayControls, assertEndpointControl, assertLabelSide } from './validate.js';
 import { buildStyleExtras, pxToTextScale } from './text-style.js';
 
 const KINDS = ['shape', 'sticker', 'simple-text', 'frame', 'stamp', 'arrow'];
@@ -219,6 +219,8 @@ function validateArrowEntry(e, i) {
     arrowheadEnd: assertArrowhead(e.arrowheadEnd, `objects[${i}].arrowheadEnd`),
     text: e.text === undefined ? undefined : assertText(e.text, `objects[${i}].text`),
     textPosition: num(e.textPosition, `objects[${i}].textPosition`, { default: 0.5, min: 0, max: 1 }),
+    labelSide: assertLabelSide(e.labelSide, `objects[${i}].labelSide`, { default: 'on' }),
+    textRotated: e.textRotated === undefined ? undefined : Boolean(e.textRotated),
     textColor: e.textColor === undefined ? undefined : { color: parseColor(e.textColor, `objects[${i}].textColor`), opacity: 1 },
     fontSize: e.fontSize === undefined ? undefined : num(e.fontSize, `objects[${i}].fontSize`, { min: 6, max: 512 }),
     midwayControls: assertMidwayControls(e.midwayControls, `objects[${i}].midwayControls`),

@@ -535,12 +535,95 @@ export function buildBatchArrowsExpr(byIndex, arrows, arrowsBehind) {
           ...(a.elbowMidwayControls ? { elbowMidwayControls: a.elbowMidwayControls } : {}),
           ...(a.textColor !== undefined ? { textColor: a.textColor } : {}),
           ...(a.fontSize !== undefined ? { fontSize: a.fontSize } : {}),
+          ...(a.textRotated !== undefined ? { textRotated: a.textRotated } : {}),
         };
         for (const k of Object.keys(fields)) map.set(k, fields[k]);
         yDoc.transact(() => { yObjects.set(newId, map); });
         out.push({ id: newId });
       }
       return out;
+    } catch (e) { return { __error: String(e) }; }
+  })()`;
+}
+
+/**
+ * Read the label-placement state for issue #42 side resolution: per arrow id
+ * the renderer's local path direction at the label position (fulcrumVector
+ * from the mounted label instance) plus the anchor stored in yDoc. The
+ * screen-side → anchor resolution happens Node-side (labelSideToAnchor).
+ * Per id: { fv: {x, y} | null, storedAnchor: number | null, noLabel: bool }
+ * or { missing: true } for an unknown object.
+ */
+export function buildArrowLabelAnchorsExpr(ids) {
+  return `(() => {
+    try {
+      const ids = ${JSON.stringify(ids)};
+      const out = {};
+      for (const id of ids) {
+        const o = window.ds && window.ds.store && window.ds.store.objects && window.ds.store.objects.get
+          ? window.ds.store.objects.get(id) : null;
+        if (!o) { out[id] = { missing: true }; continue; }
+        const yObj = window.ds.yPersistence.yDoc.getMap('objects').get(id);
+        const stored = yObj && yObj.get ? yObj.get('texts') : null;
+        const entry = Array.isArray(stored) && stored.length ? stored[0] : null;
+        const byId = entry && entry.id !== undefined
+          ? (l) => l && l.id === entry.id
+          : (l) => !!l;
+        const lbl = Array.isArray(o.textsOnArrow) ? (o.textsOnArrow.find(byId) || o.textsOnArrow[0]) : null;
+        const fv = lbl && lbl.fulcrumVector && typeof lbl.fulcrumVector.x === 'number'
+          ? { x: lbl.fulcrumVector.x, y: lbl.fulcrumVector.y } : null;
+        out[id] = { fv, storedAnchor: entry && entry.anchor !== undefined ? entry.anchor : null, noLabel: !entry };
+      }
+      return out;
+    } catch (e) { return { __error: String(e) }; }
+  })()`;
+}
+
+/**
+ * Set the beside-line anchor on the FIRST label of an arrow (issue #42),
+ * preserving its id/text/editor/position and any extra labels — unlike a
+ * full rewrite this keeps the label identity the render layer diffs by.
+ * Prefers objectsService.update (repaints the mounted arrow live, issue #7);
+ * falls back to a raw yDoc write, and raw-writes as a guarantee when the
+ * debounced service persist has not landed within persistDeadlineMs.
+ */
+export function buildSetArrowTextAnchorExpr(objectId, anchor, { persistDeadlineMs = 1500 } = {}) {
+  return `(async () => {
+    try {
+      const ds = window.ds;
+      const id = ${JSON.stringify(objectId)};
+      const yObj = ds.yPersistence.yDoc.getMap('objects').get(id);
+      if (!yObj || !yObj.get) return { __error: 'object not found' };
+      if (yObj.get('type') !== 'arrow') return { __error: 'not an arrow' };
+      const prevTexts = yObj.get('texts');
+      if (!Array.isArray(prevTexts) || !prevTexts.length) return { __error: 'arrow has no label' };
+      const entry = { ...prevTexts[0], anchor: ${Number(anchor)} };
+      const rest = prevTexts.slice(1);
+      const yDoc = ds.yPersistence.yDoc;
+      const rawWrite = () => yDoc.transact(() => {
+        yObj.set('texts', [entry, ...rest]);
+        yObj.set('updated', { a: 0, t: Date.now() });
+      });
+      const app = ds.store && ds.store.objectBuilder && ds.store.objectBuilder.getApp
+        && ds.store.objectBuilder.getApp();
+      const svc = app && app.objectsService;
+      if (svc && typeof svc.update === 'function') {
+        await svc.update(id, { texts: [entry, ...rest] });
+      } else {
+        rawWrite();
+      }
+      const matches = () => {
+        const stored = yDoc.getMap('objects').get(id).get('texts');
+        return Array.isArray(stored) && stored[0] && stored[0].anchor === ${Number(anchor)};
+      };
+      if (!matches()) {
+        const deadline = Date.now() + ${Number(persistDeadlineMs)};
+        while (!matches() && Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 100));
+        }
+        if (!matches()) rawWrite(); // guarantee the data (debounced persist may lag)
+      }
+      return { ok: true, arrow: true, id, anchor: ${Number(anchor)}, labels: 1 + rest.length, converged: matches() };
     } catch (e) { return { __error: String(e) }; }
   })()`;
 }
@@ -600,6 +683,7 @@ export function buildNativeArrowTextExpr(objectId, entry, { persistDeadlineMs = 
       const prev = Array.isArray(prevTexts) && prevTexts.length ? prevTexts[0] : null;
       const e = ${JSON.stringify(entry)};
       e.position = prev && typeof prev.position === 'number' ? prev.position : 0.5;
+      if (prev && prev.anchor !== undefined) e.anchor = prev.anchor;
       const rest = Array.isArray(prevTexts) ? prevTexts.slice(1) : [];
       await svc.update(id, { texts: [e, ...rest] });
       const matches = () => {
