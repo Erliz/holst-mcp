@@ -52,4 +52,10 @@ describe('getReference', () => {
     // summary sub-counts filter by non-empty text
     assert.match(ref.countingRules.summary, /non-empty text/i);
   });
+
+  test('documents the trimmed dump default + audit flag (issue #34)', () => {
+    assert.match(ref.countingRules.rawDump, /includeDeleteEvents/);
+    // the cap applies to the trimmed content, not the raw history
+    assert.match(ref.limits.HOLST_MAX_DUMP_BYTES, /trim/i);
+  });
 });

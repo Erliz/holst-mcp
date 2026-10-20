@@ -84,6 +84,6 @@ Everything below is operational knowledge you need — no external files require
 | HOLST_RW_BOARD_IDS | unset | UUIDs with full read+write access. When either list is set, boards outside both are refused. |
 | HOLST_RO_BOARD_IDS | unset | UUIDs readable but not writable. RO wins if an id is in both lists (fail-closed). |
 | HOLST_READ_ONLY | off | Global master switch: blocks ALL mutating tools on ALL boards. |
-| HOLST_MAX_DUMP_BYTES | 2000000 | Cap for holst_get_board_content. |
+| HOLST_MAX_DUMP_BYTES | 2000000 | Cap for holst_get_board_content, measured on the trimmed dump (delete audit + orphan docs + empty stores are cut first). |
 | HOLST_DEBUG_PORT | 9222 | CDP port. |
 `;
