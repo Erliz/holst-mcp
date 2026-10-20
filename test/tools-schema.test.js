@@ -1,6 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { TOOLS, DISPATCH } from '../src/tools-schema.js';
+import { ValidationError } from '../src/validate.js';
 
 // Guards the class of the v0.5 regression: the dispatch read args.bbox while
 // the schema did not declare it — a python no-op edit silently split the two.
@@ -34,6 +35,50 @@ describe('schema/dispatch consistency (v0.5 regression guard)', () => {
       }
     }
     assert.deepEqual(problems, []);
+  });
+
+  // The INVERSE of the invariant above (issue #57): schema→dispatch direction.
+  // A property declared in inputSchema but never forwarded by the dispatch
+  // entry is a silent drop — the v0.6 regression where holst_set_color
+  // declared backgroundStyle while the dispatch discarded it before the
+  // handler ever saw it. Pass-through entries (`addX(args.boardId, args)`)
+  // forward everything by construction; enumerating entries must read every
+  // declared property explicitly. The arrow parameter `(args) =>` does not
+  // count as a pass-through read.
+  test('every schema-declared property is forwarded by its dispatch entry (issue #57)', () => {
+    const BARE_ARGS = /\bargs\b(?![.\w])/;
+    const problems = [];
+    for (const t of TOOLS) {
+      const fn = DISPATCH[t.name];
+      if (typeof fn !== 'function') continue; // covered by the test above
+      const src = fn.toString();
+      const body = src.replace(/^\s*(?:async\s*)?(?:\(\s*args\s*\)|args)\s*=>/, '');
+      const reads = new Set();
+      for (const m of src.matchAll(READS_ARG)) reads.add(m[1]);
+      const wholeArgs = BARE_ARGS.test(body);
+      for (const prop of Object.keys(t.inputSchema.properties || {})) {
+        if (!wholeArgs && !reads.has(prop)) {
+          problems.push(`${t.name}: schema declares "${prop}" but dispatch never forwards it`);
+        }
+      }
+    }
+    assert.deepEqual(problems, []);
+  });
+
+  // Behavioral proof at the dispatch boundary (issue #57): an invalid
+  // backgroundStyle must be rejected BY setColor's own validator — proving
+  // the value survived the dispatch hop. A dropped field instead surfaces as
+  // the misleading "provide at least one of …" error. Validation runs before
+  // any CDP session, so a sentinel call never touches the live app.
+  test('holst_set_color forwards backgroundStyle to setColor validation (issue #57)', async () => {
+    await assert.rejects(
+      DISPATCH.holst_set_color({
+        boardId: '00000000-0000-4000-8000-000000000000',
+        objectId: 'obj-1',
+        backgroundStyle: '‽invalid‽',
+      }),
+      (err) => err instanceof ValidationError && /backgroundStyle must be one of/.test(err.message)
+    );
   });
 
   test('get_board_content exposes bbox and positionsOnly (the regression)', () => {

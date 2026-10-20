@@ -499,6 +499,7 @@ export const DISPATCH = {
   holst_set_color: (args) => setColor(args.boardId, args.objectId, {
     fillColor: args.fillColor, strokeColor: args.strokeColor, strokeStyle: args.strokeStyle,
     strokeWidth: args.strokeWidth, fillOpacity: args.fillOpacity, strokeOpacity: args.strokeOpacity,
+    backgroundStyle: args.backgroundStyle,
   }),
   holst_add_frame: (args) => addFrame(args.boardId, args),
   holst_screenshot: (args) => screenshot(args.boardId, { bbox: args.bbox, format: args.format, quality: args.quality, scale: args.scale, withBase64: args.withBase64 }),
