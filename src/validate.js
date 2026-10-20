@@ -346,6 +346,7 @@ export function assertArrowType(value, name, opts = {}) {
 /**
  * Arrow endpoint: either a free point { x, y } or an attachment
  * { objectId, relativePoint?: { x, y } }. All coordinates must be finite;
+ * free points are board-space with the ±1e7 COORD cap (issue #69);
  * relativePoint is unit-space 0..1 inclusive (issue #68, live-verified).
  * Returns the endpoint normalized for the write path; control (issue #41:
  * port sides, object-endpoint-only — a free point has no box edge to pin)
@@ -375,8 +376,8 @@ export function assertArrowEndpoint(ep, name) {
     fail(`${name}.control is only valid on object endpoints ({ objectId } attachments), not free points { x, y }`);
   }
   return {
-    x: num(ep.x, `${name}.x`),
-    y: num(ep.y, `${name}.y`),
+    x: num(ep.x, `${name}.x`, COORD),
+    y: num(ep.y, `${name}.y`, COORD),
   };
 }
 

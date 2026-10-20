@@ -56,8 +56,8 @@ function endpoint(ep, label, index) {
   }
   return {
     point: {
-      x: num(ep.x, `objects[${index}].${label}.x`),
-      y: num(ep.y, `objects[${index}].${label}.y`),
+      x: num(ep.x, `objects[${index}].${label}.x`, COORD),
+      y: num(ep.y, `objects[${index}].${label}.y`, COORD),
     },
   };
 }
