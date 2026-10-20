@@ -41,7 +41,8 @@ Everything below is operational knowledge you need — no external files require
 - Arrow labels: pass \`text\` (+ optional \`textPosition\` 0..1) to \`holst_add_arrow\` or a batch
   arrow entry; rewrite later with \`holst_update_text\` on the arrow id. \`labelSide\`:
   on (default, masked on the line) | left | right — beside the segment with a fixed 7px
-  gap (right = +x side; below for horizontal segments); \`textRotated: true\` turns the
+  gap (right = +x side; below for horizontal segments); left/right require \`text\` — without
+  it the call fails fast instead of silently dropping the side; \`textRotated: true\` turns the
   label along the arrow. No background color exists on arrow labels. Stroke styles:
   \`strokeStyle\` solid (default) / dashed / dotted on add_arrow and holst_set_color.
 - Arrowheads: \`arrowheadStart\`/\`arrowheadEnd\` = none | miro | arc | figma. Headless axes/dividers:
