@@ -2,7 +2,7 @@
 // shared validators, assigns refs, orders creations before arrows, and
 // resolves arrow ref-endpoints to creation indexes. Pure — no side effects.
 
-import { ValidationError, assertText, assertNoMarkdown, num, safeToken, assertStrokeStyle, assertOpacity, assertBorderRadius, assertRuns, assertShapeType, assertArrowType, assertObjectId, parseColor, assertArrowhead, assertBackgroundStyle } from './validate.js';
+import { ValidationError, assertText, assertNoMarkdown, num, safeToken, assertStrokeStyle, assertOpacity, assertBorderRadius, assertRuns, assertShapeType, assertArrowType, assertObjectId, parseColor, assertArrowhead, assertBackgroundStyle, assertMidwayControls, assertElbowMidwayControls } from './validate.js';
 import { buildStyleExtras, pxToTextScale } from './text-style.js';
 
 const KINDS = ['shape', 'sticker', 'simple-text', 'frame', 'stamp', 'arrow'];
@@ -214,6 +214,8 @@ function validateArrowEntry(e, i) {
     textPosition: num(e.textPosition, `objects[${i}].textPosition`, { default: 0.5, min: 0, max: 1 }),
     textColor: e.textColor === undefined ? undefined : { color: parseColor(e.textColor, `objects[${i}].textColor`), opacity: 1 },
     fontSize: e.fontSize === undefined ? undefined : num(e.fontSize, `objects[${i}].fontSize`, { min: 6, max: 512 }),
+    midwayControls: assertMidwayControls(e.midwayControls, `objects[${i}].midwayControls`),
+    elbowMidwayControls: assertElbowMidwayControls(e.elbowMidwayControls, `objects[${i}].elbowMidwayControls`),
     from: endpoint(e.from, 'from', i),
     to: endpoint(e.to, 'to', i),
   };
