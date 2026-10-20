@@ -156,5 +156,6 @@ describe('reference: arrow geometry points are documented', () => {
     assert.ok(geo, 'arrowGeometry key must exist');
     assert.match(geo.how, /midwayControls/);
     assert.match(geo.hop, /client|yourself/i);
+    assert.match(geo.how, /elbow.*(ignor|inert)/i, 'must warn: the elbow renderer ignores these points');
   });
 });

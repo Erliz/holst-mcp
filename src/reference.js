@@ -52,7 +52,7 @@ export function getReference() {
       strokeWidth: 'line thickness 0..100 (UI examples: 2 thin, 5 medium, 17 fat)',
     },
     arrowGeometry: {
-      how: 'midwayControls: [{x, y}, ...] absolute board points the arrow routes through (add_arrow + batch; the UI shows them as draggable "elbows", verified on curved arrows); visible verbatim in get_board_content',
+      how: 'midwayControls: [{x, y}, ...] absolute board points the arrow routes through (add_arrow + batch; the UI shows them as draggable "elbows", verified on curved arrows); visible verbatim in get_board_content. CURVED ONLY: the elbow renderer ignores these points (live-checked: bounds stay flat) — elbow shaping is elbowMidwayControls territory (#41)',
       hop: 'no built-in hop/bridge primitive — compose crossing bumps yourself as a point sequence on the lighter arrow; a first-class hop belongs to the app',
     },
     opacity: 'fillOpacity / strokeOpacity 0..1 in set_color (adjusts the opacity inside the color object, keeps the color); translucent washes e.g. fillOpacity 0.03',

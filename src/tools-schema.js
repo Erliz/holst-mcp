@@ -327,7 +327,7 @@ export const TOOLS = [
         textPosition: { type: 'number', default: 0.5, description: 'Label position along the arrow, 0..1 (0.5 = middle)' },
         midwayControls: {
           type: 'array',
-          description: 'Geometry shaping: absolute [{ x, y }] board points the arrow routes through (verified on curved arrows; the UI shows them as draggable "elbows"). Compose crossing hops/bumps yourself as point sequences — there is no built-in hop primitive. Max 100 points.',
+          description: 'Geometry shaping: absolute [{ x, y }] board points the arrow routes through. CURVED arrows only — the elbow renderer ignores them (live-verified). Compose crossing hops/bumps yourself as point sequences — there is no built-in hop primitive. Max 100 points.',
         },
         fontSize: { type: 'number', description: 'Label font size in px' },
         textColor: { type: 'string', description: 'Label color: #RRGGBB' },
