@@ -17,6 +17,11 @@ const TOKEN_RE = /^[A-Za-z][A-Za-z0-9-]{0,31}$/;
 // source of truth; batch.js and holst.js import this — issue #62).
 export const COORD = { min: -1e7, max: 1e7 };
 
+// Unit-space attachment range for arrow relativePoint (issue #68). The docs
+// promised 0..1 all along; live probe (111 attached endpoints) confirmed the
+// app's own values sit inside [0, 1] inclusive — 0 and 1 are its side anchors.
+export const RELATIVE_POINT = { min: 0, max: 1 };
+
 function fail(message) {
   throw new ValidationError(message);
 }
@@ -340,7 +345,8 @@ export function assertArrowType(value, name, opts = {}) {
 
 /**
  * Arrow endpoint: either a free point { x, y } or an attachment
- * { objectId, relativePoint?: { x, y } }. All coordinates must be finite.
+ * { objectId, relativePoint?: { x, y } }. All coordinates must be finite;
+ * relativePoint is unit-space 0..1 inclusive (issue #68, live-verified).
  * Returns the endpoint normalized for the write path; control (issue #41:
  * port sides, object-endpoint-only — a free point has no box edge to pin)
  * is mapped from its side name to the app's numeric code.
@@ -357,8 +363,8 @@ export function assertArrowEndpoint(ep, name) {
         fail(`${name}.relativePoint must be an object { x, y }`);
       }
       out.relativePoint = {
-        x: num(ep.relativePoint.x, `${name}.relativePoint.x`),
-        y: num(ep.relativePoint.y, `${name}.relativePoint.y`),
+        x: num(ep.relativePoint.x, `${name}.relativePoint.x`, RELATIVE_POINT),
+        y: num(ep.relativePoint.y, `${name}.relativePoint.y`, RELATIVE_POINT),
       };
     }
     const control = assertEndpointControl(ep.control, `${name}.control`);
