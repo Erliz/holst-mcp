@@ -7,6 +7,7 @@ import { shapeContent, trimContent } from './dump-shape.js';
 import { buildCanvasStateExpr, buildCameraFitExpr, buildCameraSetExpr, buildNativeArrowTextExpr } from './eval-scripts.js';
 import { ensureCdp } from './autostart.js';
 import {
+  COORD,
   ValidationError,
   assertBoardId,
   assertObjectId,
@@ -55,7 +56,7 @@ import {
   buildMeasureTextExpr,
 } from './eval-scripts.js';
 
-const COORD = { min: -1e7, max: 1e7 };
+// COORD lives in validate.js now (issue #62 dedupe).
 const SIZE = { min: 1, max: 1e6 };
 
 /**

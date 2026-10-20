@@ -2,14 +2,14 @@
 // shared validators, assigns refs, orders creations before arrows, and
 // resolves arrow ref-endpoints to creation indexes. Pure — no side effects.
 
-import { ValidationError, assertText, assertNoMarkdown, num, safeToken, assertStrokeStyle, assertOpacity, assertBorderRadius, assertRuns, assertShapeType, assertArrowType, assertObjectId, parseColor, assertArrowhead, assertBackgroundStyle, assertMidwayControls, assertElbowMidwayControls, assertEndpointControl, assertLabelSide, assertLabelSideHasText } from './validate.js';
+import { COORD, ValidationError, assertText, assertNoMarkdown, num, safeToken, assertStrokeStyle, assertOpacity, assertBorderRadius, assertRuns, assertShapeType, assertArrowType, assertObjectId, parseColor, assertArrowhead, assertBackgroundStyle, assertMidwayControls, assertElbowMidwayControls, assertEndpointControl, assertLabelSide, assertLabelSideHasText } from './validate.js';
 import { buildStyleExtras, pxToTextScale } from './text-style.js';
 
 const KINDS = ['shape', 'sticker', 'simple-text', 'frame', 'stamp', 'arrow'];
 const REF_RE = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
 const BATCH_LIMIT = 200;
 
-const COORD = { min: -1e7, max: 1e7 };
+// COORD lives in validate.js now (issue #62 dedupe).
 const SIZE = { min: 1, max: 1e6 };
 
 function endpoint(ep, label, index) {
