@@ -93,6 +93,14 @@ describe('schema/dispatch consistency (v0.5 regression guard)', () => {
     assert.ok('ids' in t.inputSchema.properties);
   });
 
+  test('update_text documents arrow label position AND side preservation (issue #63)', () => {
+    const t = byName.get('holst_update_text');
+    assert.match(t.description, /arrow label/i);
+    // Since #42 the rewrite is anchor-preserving: both position and the
+    // signed side of the previous label record survive it.
+    assert.match(t.description, /keeping its position and side/i);
+  });
+
   test('resize_object documents simple-text width semantics (issue #9)', () => {
     const t = byName.get('holst_resize_object');
     assert.match(t.description, /simple-text/i);
