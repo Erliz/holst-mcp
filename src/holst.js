@@ -27,6 +27,7 @@ import {
   parseColor,
   num,
   safeToken,
+  assertLabelSideHasText,
 } from './validate.js';
 import { assertBoardReadable, assertBoardWritable, assertNotReadOnly, limitDump } from './policy.js';
 import { buildBatchPlan } from './batch.js';
@@ -1146,6 +1147,7 @@ export async function addArrow(boardId, {
   elbowMidwayControls = assertElbowMidwayControls(elbowMidwayControls, 'elbowMidwayControls');
   if (text !== undefined) assertNoMarkdown(text);
   labelSide = assertLabelSide(labelSide, 'labelSide', { default: 'on' });
+  assertLabelSideHasText(labelSide, text); // issue #61: side without text was silently dropped
   textRotated = textRotated === undefined ? undefined : Boolean(textRotated);
   const texts = text === undefined ? null : buildArrowTexts(text, textPosition);
   const styleExtras = buildStyleExtras({ fontSize, textColor, textRotated });

@@ -147,7 +147,7 @@ export const TOOLS = [
       'Create a whole diagram in ONE call — 10-15x faster than sequential add_* tools (30 objects in ~15s instead of minutes). ' +
       'objects: array of { kind: "shape"|"sticker"|"simple-text"|"frame"|"stamp", ref?: "name", text?, x, y, ...options } plus ' +
       '{ kind: "arrow", from: { ref, relativePoint?, control? }|{ x, y }, to: ..., text?, textPosition?, labelSide?, textRotated?, strokeStyle?, arrowheadStart?, arrowheadEnd?, strokeWidth?, midwayControls?: [{x, y}, ...], elbowMidwayControls?: [{x: V, y: null}|{x: null, y: H}, ...] } — ' +
-      'arrows support on-arrow labels (labelSide left/right = beside the segment with a 7px gap; textRotated = along the arrow), dashed/dotted styles, headless variants (arrowhead*: "none"), geometry shaping (midwayControls = free points on curved, elbowMidwayControls = corridor lines on elbow) and port control (endpoint control: top|right|bottom|left pins the exit side). ' +
+      'arrows support on-arrow labels (labelSide left/right = beside the segment with a 7px gap, requires text — the entry fails fast without it; textRotated = along the arrow), dashed/dotted styles, headless variants (arrowhead*: "none"), geometry shaping (midwayControls = free points on curved, elbowMidwayControls = corridor lines on elbow) and port control (endpoint control: top|right|bottom|left pins the exit side). ' +
       'Text objects support typography: fontSize, textColor (#RRGGBB ok), horizontalAlign, bold/italic/underline/strikethrough. ' +
       'options.arrowsBehind: true places arrows BELOW the nodes (design-system layering). ' +
       'ref is a local name (letters/digits/dash/_); arrows link refs instead of UUIDs; refs auto-generate when omitted. ' +
@@ -328,7 +328,7 @@ export const TOOLS = [
         labelSide: {
           type: 'string',
           default: 'on',
-          description: "Where the label sits (needs text): 'on' = on the line (renderer masks the stroke behind it); 'left'/'right' = beside the segment with a fixed 7px gap — right = +x side of the segment (below for horizontal segments). Resolved against the rendered geometry after mount; later endpoint edits may re-side it. Arrow labels have NO background color",
+          description: "Where the label sits: 'on' = on the line (renderer masks the stroke behind it); 'left'/'right' = beside the segment with a fixed 7px gap — right = +x side of the segment (below for horizontal segments); left/right REQUIRE text and fail fast without it (ValidationError). Resolved against the rendered geometry after mount; later endpoint edits may re-side it. Arrow labels have NO background color",
         },
         textRotated: { type: 'boolean', description: 'Rotate the label to follow the arrow direction (default: horizontal text)' },
         midwayControls: {

@@ -130,6 +130,20 @@ export function assertLabelSide(value, name, opts = {}) {
 }
 
 /**
+ * Cross-field rule (issue #61): labelSide ≠ 'on' only takes effect on an
+ * arrow that HAS a label — without text the side was silently dropped
+ * (arrow created, no error, no sideOk). Fail fast instead: the caller
+ * learns the mistake at the call, not by inspecting the board. 'on' (the
+ * default) and an absent side stay valid without text — documented no-op.
+ */
+export function assertLabelSideHasText(labelSide, text, name = 'labelSide') {
+  if (labelSide !== undefined && labelSide !== 'on'
+    && (text === undefined || String(text) === '')) {
+    fail(`${name} ${JSON.stringify(labelSide)} requires label text ('on' without text is the documented no-op)`);
+  }
+}
+
+/**
  * Color value: #RRGGBB hex ONLY (v0.6.0). Hex converts to the integer form
  * the app stores (verified: UI '#782baf' → {color: 7875503}). Internal
  * palette token names are no longer accepted — tokens and their hex values
