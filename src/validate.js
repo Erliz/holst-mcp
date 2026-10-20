@@ -110,6 +110,26 @@ export function assertStrokeStyle(value, name, opts = {}) {
 }
 
 /**
+ * On-arrow label side (issue #42): 'on' = on the line (default, renderer
+ * masks the stroke behind the label), 'left'/'right' = beside the segment
+ * with the app's fixed 7px gap. Screen-side semantics: right = +x offset
+ * (below for horizontal segments).
+ */
+export const LABEL_SIDES = ['on', 'left', 'right'];
+
+export function assertLabelSide(value, name, opts = {}) {
+  const { default: def } = opts;
+  if (value === undefined) {
+    if (def === undefined) fail(`${name} is required`);
+    return def;
+  }
+  if (typeof value !== 'string' || !LABEL_SIDES.includes(value)) {
+    fail(`${name} must be one of ${LABEL_SIDES.join(', ')}, got: ${typeof value === 'string' ? JSON.stringify(value.slice(0, 64)) : typeof value}`);
+  }
+  return value;
+}
+
+/**
  * Color value: #RRGGBB hex ONLY (v0.6.0). Hex converts to the integer form
  * the app stores (verified: UI '#782baf' → {color: 7875503}). Internal
  * palette token names are no longer accepted — tokens and their hex values

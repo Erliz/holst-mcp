@@ -15,6 +15,7 @@ import {
   assertArrowEndpoint,
   assertStrokeStyle,
   assertMidwayControls,
+  assertLabelSide,
   assertElbowMidwayControls,
   assertBackgroundStyle,
   assertArrowhead,
@@ -29,7 +30,7 @@ import {
 } from './validate.js';
 import { assertBoardReadable, assertBoardWritable, assertNotReadOnly, limitDump } from './policy.js';
 import { buildBatchPlan } from './batch.js';
-import { buildArrowTexts, arrowLabelMatches } from './arrow-text.js';
+import { buildArrowTexts, arrowLabelMatches, labelSideToAnchor } from './arrow-text.js';
 import { buildStyleExtras, pxToTextScale, buildSegments, segmentsToSlateNodes, resolveUpdateStyleExtras } from './text-style.js';
 import { docTextMatches } from './text-match.js';
 import {
@@ -45,6 +46,8 @@ import {
   buildAddArrowExpr,
   buildBatchCreationExpr,
   buildBatchArrowsExpr,
+  buildArrowLabelAnchorsExpr,
+  buildSetArrowTextAnchorExpr,
   buildBatchTextWriteExpr,
   buildArrowLabelsStateExpr,
   buildDeleteObjectsExpr,
@@ -84,16 +87,17 @@ async function resolveDoc(session, objectId) {
 
 /**
  * Rewrite an arrow's label. Arrows keep text in a plain `texts` array
- * (NOT a Y.Text document): [{ position, id, text, editor }]. Replaces the
- * first label, preserving its position and any extra labels beyond the first.
+ * (NOT a Y.Text document): [{ position, id, text, editor, anchor? }].
+ * Replaces the first label, preserving its position and side (anchor,
+ * issue #42) and any extra labels beyond the first. Exposed for tests.
  * Prefers the app's own objectsService.update — the only path that re-renders
  * the MOUNTED arrow live; raw yDoc `texts` writes persist but never repaint
  * until a page reload on app 0.0.7 (issue #7). Falls back to the raw write
  * on older builds, on service errors, or when the debounced yDoc persist
  * has not landed (the raw write guarantees the data).
  */
-async function updateArrowText(session, objectId, text) {
-  const entry = buildArrowTexts(text, 0.5)[0]; // position re-derived in page from the existing label
+export async function updateArrowText(session, objectId, text) {
+  const entry = buildArrowTexts(text, 0.5)[0]; // position + anchor re-derived in page from the existing label
   try {
     const native = await session.evaluate(
       buildNativeArrowTextExpr(objectId, entry),
@@ -117,6 +121,7 @@ async function updateArrowText(session, objectId, text) {
         const prev = Array.isArray(prevTexts) && prevTexts.length ? prevTexts[0] : null;
         const entry = ${JSON.stringify(entry)};
         entry.position = prev && typeof prev.position === 'number' ? prev.position : 0.5;
+        if (prev && prev.anchor !== undefined) entry.anchor = prev.anchor;
         const rest = Array.isArray(prevTexts) ? prevTexts.slice(1) : [];
         yDoc.transact(() => {
           obj.set('texts', [entry, ...rest]);
@@ -172,6 +177,44 @@ export async function verifyArrowLabelsWithHeal(session, jobs, { healDelayMs = 1
       out[j.id] = 'fail'; // rewrite itself failed — the caller must know
     }
   }
+  return out;
+}
+
+/**
+ * Issue #42: resolve labelSide for freshly created arrow labels. The app
+ * model stores the side as a signed `anchor` relative to the LOCAL segment
+ * direction, which only the render layer knows — so the side is resolved
+ * AFTER mount: read the label's fulcrumVector, map the screen side to an
+ * anchor (labelSideToAnchor), and patch the entry only when it disagrees
+ * (buildSetArrowTextAnchorExpr keeps label identity, unlike a full rewrite).
+ * jobs: [{ id, labelSide }] with labelSide ≠ 'on'. Returns per id
+ * 'ok' | 'fail' | 'unknown' (unknown = render API gone / label not mounted —
+ * cannot resolve, nothing was written).
+ */
+export async function applyArrowLabelSides(session, jobs, { settleMs = 1000, attempts = 3 } = {}) {
+  const out = {};
+  if (!jobs.length) return out;
+  let pending = jobs.slice();
+  for (let attempt = 0; attempt < attempts && pending.length; attempt++) {
+    if (attempt > 0 && settleMs) await new Promise((r) => setTimeout(r, settleMs));
+    let states = await session.evaluate(buildArrowLabelAnchorsExpr(pending.map((j) => j.id)));
+    if (!states || states.__error) states = {};
+    const still = [];
+    for (const j of pending) {
+      const st = states[j.id];
+      if (!st || st.missing || st.noLabel || !st.fv) { still.push(j); continue; } // mount lag — retry
+      const want = labelSideToAnchor(st.fv.x, st.fv.y, j.labelSide);
+      if (st.storedAnchor === want) { out[j.id] = 'ok'; continue; }
+      try {
+        const r = await session.evaluate(buildSetArrowTextAnchorExpr(j.id, want), { awaitPromise: true });
+        out[j.id] = r && !r.__error && r.converged !== false ? 'ok' : 'fail';
+      } catch {
+        out[j.id] = 'fail';
+      }
+    }
+    pending = still;
+  }
+  for (const j of pending) out[j.id] = 'unknown'; // fulcrum/label never settled
   return out;
 }
 
@@ -1076,6 +1119,8 @@ export async function addArrow(boardId, {
   arrowheadEnd,          // 'none' disables the default end head
   text,            // optional on-arrow label
   textPosition = 0.5,   // 0..1 along the arrow path
+  labelSide = 'on',     // issue #42: 'on' | 'left' | 'right' (screen side; resolved post-mount)
+  textRotated,      // issue #42: rotate the label to follow the arrow direction
   fontSize,        // label font size
   textColor,       // label color (#RRGGBB)
   midwayControls, // issue #39: geometry shaping points, verbatim
@@ -1095,8 +1140,10 @@ export async function addArrow(boardId, {
   midwayControls = assertMidwayControls(midwayControls, 'midwayControls');
   elbowMidwayControls = assertElbowMidwayControls(elbowMidwayControls, 'elbowMidwayControls');
   if (text !== undefined) assertNoMarkdown(text);
+  labelSide = assertLabelSide(labelSide, 'labelSide', { default: 'on' });
+  textRotated = textRotated === undefined ? undefined : Boolean(textRotated);
   const texts = text === undefined ? null : buildArrowTexts(text, textPosition);
-  const styleExtras = buildStyleExtras({ fontSize, textColor });
+  const styleExtras = buildStyleExtras({ fontSize, textColor, textRotated });
   const session = await getBoardSession(boardId);
   try {
     const result = await session.evaluate(
@@ -1107,6 +1154,11 @@ export async function addArrow(boardId, {
     );
     if (result?.__error) throw new Error(result.__error);
     result.mounted = await ensureMounted(session, result.id);
+    // Issue #42: the side is a signed anchor relative to the LOCAL segment
+    // direction — resolvable only against the mounted render layer.
+    if (texts && labelSide !== 'on') {
+      result.sideOk = (await applyArrowLabelSides(session, [{ id: result.id, labelSide }]))[result.id] ?? 'unknown';
+    }
     return result;
   } finally {
     releaseSession(session);
@@ -1569,9 +1621,21 @@ export async function batchCreate(boardId, entries, options = {}) {
       ? await verifyArrowLabelsWithHeal(session, arrowTextJobs)
       : {};
 
+    // Phase 3c (issue #42): resolve labelSide into the model's signed anchor.
+    // The side is relative to the LOCAL segment direction, known only to the
+    // mounted render layer — so it is patched after the labels verified.
+    const sideJobs = plan.arrows
+      .map((a, ai) => ({ ref: a.ref, id: arrowIds[ai], labelSide: a.labelSide, text: a.text }))
+      .filter((j) => j.id && j.labelSide && j.labelSide !== 'on'
+        && j.text !== undefined && String(j.text) !== '');
+    const sideStates = sideJobs.length
+      ? await applyArrowLabelSides(session, sideJobs)
+      : {};
+
     // Assemble result
     const createdMap = {};
     const textFailedRefs = [];
+    const sideFailedRefs = [];
     byIndex.forEach((c, idx) => {
       const wr = writeResults.find((w) => w.idx === idx);
       createdMap[c.ref] = {
@@ -1592,15 +1656,25 @@ export async function batchCreate(boardId, entries, options = {}) {
         textOk: state === 'ok' ? true : state === 'fail' ? false : null,
       };
       if (state === 'fail') textFailedRefs.push(a.ref);
+      const side = a.labelSide !== undefined && a.labelSide !== 'on'
+        && a.text !== undefined && String(a.text) !== ''
+        ? (sideStates[arrowIds[ai]] ?? null) : null;
+      if (side !== null) {
+        // ok = side resolved and written; fail = write failed; null = render
+        // API gone / label not mounted (cannot resolve — side not applied)
+        createdMap[a.ref].sideOk = side === 'ok' ? true : side === 'fail' ? false : null;
+        if (side === 'fail') sideFailedRefs.push(a.ref);
+      }
     });
     const unmountedRefs = byIndex.filter((c) => !mountedMap[c.id]).map((c) => c.ref);
     return {
-      ok: textFailedRefs.length === 0 && unmountedRefs.length === 0,
+      ok: textFailedRefs.length === 0 && unmountedRefs.length === 0 && sideFailedRefs.length === 0,
       created: createdMap,
       arrowIds,
       objectCount: byIndex.length,
       arrowCount: arrowIds.length,
       textFailedRefs,
+      sideFailedRefs,
       unmountedRefs,
     };
   } finally {
