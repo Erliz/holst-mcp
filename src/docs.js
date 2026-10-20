@@ -16,12 +16,17 @@ Everything below is operational knowledge you need — no external files require
 1. \`holst_whoami\` — verify the connection (returns the logged-in user).
 2. \`holst_list_boards\` — find the target board id (strict UUID).
 3. \`holst_get_board_summary\` — read structure before editing.
-4. Create objects. For 3+ objects ALWAYS use \`holst_batch_create\` (one call, whole diagram,
+4. Size text before creating: \`holst_measure_text\` (text, fontSize, fontFamily REQUIRED)
+   returns \`{ widthPx, heightPx, lineHeightPx }\` from the app's own loaded fonts —
+   mono SourceCodePro renders ~0.72em/char (not the nominal 0.6), bold caps ~0.9em.
+   Create with width ≥ widthPx + padding. Pure read — works on read-only boards.
+   Details: \`holst_reference\` → measureText.
+5. Create objects. For 3+ objects ALWAYS use \`holst_batch_create\` (one call, whole diagram,
    ~10x faster): array of entries with optional \`ref\` names + arrows linking refs.
    Individual \`holst_add_*\` tools are fine for single objects.
-5. Verify with \`holst_get_board_summary\` — every block must show its text.
+6. Verify with \`holst_get_board_summary\` — every block must show its text.
    Missing text → retry once via \`holst_update_text\` (idempotent).
-6. \`holst_screenshot\` — visual check for humans/multimodal models: pass bbox around
+7. \`holst_screenshot\` — visual check for humans/multimodal models: pass bbox around
    the created area; the camera returns to its place afterwards. NOT for pixel-exact
    color checks (slight P3 shift).
 
