@@ -53,7 +53,7 @@ export function getReference() {
     },
     opacity: 'fillOpacity / strokeOpacity 0..1 in set_color (adjusts the opacity inside the color object, keeps the color); translucent washes e.g. fillOpacity 0.03',
     backgroundStyles: { values: BACKGROUND_STYLES, note: 'frames only: fill (background without border), fill-border (both), border-only (outline, fill ignored); absent field = app default look' },
-    zOrder: 'zIndex field; batch options.arrowsBehind: true places connectors BELOW the created nodes (design-system layering)',
+    zOrder: 'zIndex field; batch options.arrowsBehind: true places connectors BELOW the created nodes (design-system layering). After-creation control: holst_set_z_order — placement front (above everything) / back (below everything, frames included) or absolute zIndex; current values are visible in holst_get_board_content',
     arrowLabels: {
       how: 'add_arrow / batch arrow entry: text + textPosition (0..1 along the path, default 0.5 middle); update later via holst_update_text on the arrow id',
       storage: 'plain texts field on the arrow object (no documentId) — visible in get_board_content as texts[]',
