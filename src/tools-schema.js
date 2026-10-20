@@ -7,7 +7,7 @@ import {
   whoAmI, doctor, listBoards, batchCreate, getBoardContent, getBoardSummary,
   searchBoardText, addSticker, updateText, deleteObject, deleteObjects,
   addShape, addSimpleText, addArrow, moveObject, resizeObject, setColor,
-  addFrame, addStamp, screenshot, measureText } from './holst.js';
+  addFrame, addStamp, screenshot, measureText, setZOrder } from './holst.js';
 import { getReference } from './reference.js';
 import { SHAPE_TYPES, STROKE_STYLES } from './validate.js';
 
@@ -360,6 +360,22 @@ export const TOOLS = [
     },
   },
   {
+    name: 'holst_set_z_order',
+    description:
+      'Change the layer order of an existing object — fix wrong layering WITHOUT delete + recreate (e.g. a label under a zone). Pass EXACTLY ONE of: placement ("front" = above everything, "back" = below everything, frames included) or zIndex (absolute value, same vocabulary as batch entries; read current values via holst_get_board_content). Result returns the effective zIndex. Works for every object kind (shapes, stickers, simple-texts, frames, stamps, arrows).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        boardId: { type: 'string' },
+        objectId: { type: 'string', description: 'From get_board_content / creation result' },
+        placement: { type: 'string', enum: ['front', 'back'], description: 'front = above everything; back = below everything (below frames too)' },
+        zIndex: { type: 'number', description: 'Absolute z value -10000000..10000000 (omit when using placement)' },
+      },
+      required: ['boardId', 'objectId'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'holst_add_frame',
     description:
       'Add a large labeled container that sits BELOW content (groups a diagram). labelText is a plain field, no separate document. backgroundStyle: fill / fill-border / border-only. ' + ADD_NOTE,
@@ -461,6 +477,7 @@ export const DISPATCH = {
   holst_add_arrow: (args) => addArrow(args.boardId, args),
   holst_move_object: (args) => moveObject(args.boardId, args.objectId, { x: args.x, y: args.y }),
   holst_resize_object: (args) => resizeObject(args.boardId, args.objectId, { width: args.width, height: args.height }),
+  holst_set_z_order: (args) => setZOrder(args.boardId, args.objectId, { zIndex: args.zIndex, placement: args.placement }),
   holst_set_color: (args) => setColor(args.boardId, args.objectId, {
     fillColor: args.fillColor, strokeColor: args.strokeColor, strokeStyle: args.strokeStyle,
     strokeWidth: args.strokeWidth, fillOpacity: args.fillOpacity, strokeOpacity: args.strokeOpacity,

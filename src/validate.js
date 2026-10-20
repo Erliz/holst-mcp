@@ -148,6 +148,22 @@ export function assertBackgroundStyle(value, name) {
 }
 
 /**
+ * Z-order placement for set_z_order (issue #10): relative to the current
+ * landscape — front = above everything, back = below everything (frames
+ * included; frames themselves sit at the bottom by convention).
+ */
+const Z_PLACEMENTS = ['front', 'back'];
+export { Z_PLACEMENTS };
+
+export function assertZPlacement(value, name) {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || !Z_PLACEMENTS.includes(value)) {
+    fail(`${name} must be one of ${Z_PLACEMENTS.join(', ')}, got: ${typeof value === 'string' ? JSON.stringify(value.slice(0, 64)) : typeof value}`);
+  }
+  return value;
+}
+
+/**
  * Arrowhead shape. Verified values from the app UI: none, miro, arc, figma.
  * undefined = Holst default (no start head, standard end head).
  */

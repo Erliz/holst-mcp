@@ -39,6 +39,7 @@ MCP-сервер для работы с досками Holst.so (российс�
 | `holst_update_text` | Перезаписать текст в стикере / shape / simple-text / подписи стрелки (+ стиль: fontSize, textColor, bold/italic; `\n` = параграф) |
 | `holst_move_object` | Переместить объект |
 | `holst_resize_object` | Изменить размер (для shape, sticker) |
+| `holst_set_z_order` | Слой объекта после создания (#10): `placement` (front = выше всех, back = ниже всех, включая фреймы) ИЛИ абсолютный `zIndex` (−1e7..1e7, тот же словарь, что в batch; текущие значения видны в `get_board_content`). Возвращает эффективный `zIndex`. Работает для всех типов объектов — без delete + recreate |
 | `holst_set_color` | Установить fillColor / strokeColor (`#RRGGBB`) / strokeStyle (solid/dashed/dotted) / strokeWidth / fillOpacity / strokeOpacity (0..1) / backgroundStyle (фреймы) |
 | `holst_delete_object` | Удалить объект |
 | `holst_delete_objects` | Массовое удаление одним вызовом (до 200 id, per-id отчёт; каскадно удалённые — `{ok: true, alreadyGone: true}`, не ошибка) |

@@ -56,6 +56,16 @@ describe('schema/dispatch consistency (v0.5 regression guard)', () => {
     assert.match(t.description, /height (is )?(not|auto)/i);
   });
 
+  test('set_z_order documents placement/zIndex semantics (issue #10)', () => {
+    const t = byName.get('holst_set_z_order');
+    assert.ok(t, 'tool not declared');
+    assert.match(t.description, /front|back/i);
+    assert.match(t.description, /exactly one/i, 'mutual exclusion must be documented');
+    const props = t.inputSchema.properties;
+    assert.ok('zIndex' in props && 'placement' in props);
+    assert.deepEqual(props.placement.enum, ['front', 'back']);
+  });
+
   test('enum-backed descriptions are GENERATED from validate.js data (no stale tokens)', async () => {
     const { SHAPE_TYPES, ARROW_TYPES, ARROWHEADS, STROKE_STYLES } = await import('../src/validate.js');
     const shape = byName.get('holst_add_shape');
