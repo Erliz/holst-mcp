@@ -52,8 +52,9 @@ export function getReference() {
       strokeWidth: 'line thickness 0..100 (UI examples: 2 thin, 5 medium, 17 fat)',
     },
     arrowGeometry: {
-      how: 'midwayControls: [{x, y}, ...] absolute board points the arrow routes through (add_arrow + batch; the UI shows them as draggable "elbows", verified on curved arrows); visible verbatim in get_board_content. CURVED ONLY: the elbow renderer ignores these points (live-checked: bounds stay flat) — elbow shaping is elbowMidwayControls territory (#41)',
-      hop: 'no built-in hop/bridge primitive — compose crossing bumps yourself as a point sequence on the lighter arrow; a first-class hop belongs to the app',
+      how: 'midwayControls: [{x, y}, ...] absolute board points the arrow routes through (add_arrow + batch; the UI shows them as draggable "elbows", verified on curved arrows); visible verbatim in get_board_content. CURVED ONLY: the elbow renderer ignores these points (live-checked: bounds stay flat) — elbow shaping is elbowMidwayControls territory',
+      elbow: 'elbowMidwayControls: corridor constraints for ELBOW arrows (curved renderer ignores them): {x: V, y: null} = route passes the vertical line x=V, {x: null, y: H} = passes the horizontal line y=H, applied in order (UI-drawn zigzag round-trip). Rectangular hop over a crossing at (X, Y), height r: [{x: X−r, y: null}, {x: null, y: Y−r}, {x: X+r, y: null}]. Switching arrowType does NOT re-interpret controls — set type and its matching field together',
+      hop: 'no built-in hop/bridge primitive — compose crossing bumps yourself: curved = arc via midway points, elbow = rectangular step via corridors; a first-class hop belongs to the app',
     },
     opacity: 'fillOpacity / strokeOpacity 0..1 in set_color (adjusts the opacity inside the color object, keeps the color); translucent washes e.g. fillOpacity 0.03',
     backgroundStyles: { values: BACKGROUND_STYLES, note: 'frames only: fill (background without border), fill-border (both), border-only (outline, fill ignored); absent field = app default look' },

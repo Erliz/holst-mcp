@@ -347,3 +347,33 @@ export function assertMidwayControls(value, name) {
     return { x: p.x, y: p.y };
   });
 }
+
+/**
+ * Elbow corridor constraints (issue #39, elbow half): the app routes elbow
+ * arrows through corridor LINES — {x: V, y: null} = pass the vertical line
+ * x=V, {x: null, y: H} = pass the horizontal line y=H, applied in order.
+ * Exactly one of x/y must be a finite number; the other is normalized to the
+ * app's canonical null. Shape captured from a UI-drawn zigzag (live round-trip).
+ */
+export function assertElbowMidwayControls(value, name) {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length === 0) {
+    fail(`${name} must be a non-empty array of corridor objects {x, y} (exactly one coordinate a number)`);
+  }
+  if (value.length > 100) {
+    fail(`${name} accepts at most 100 corridors, got ${value.length}`);
+  }
+  return value.map((c, i) => {
+    if (c === null || typeof c !== 'object' || Array.isArray(c)) {
+      fail(`${name}[${i}] must be a corridor object { x, y }`);
+    }
+    const xNum = c.x !== null && c.x !== undefined;
+    const yNum = c.y !== null && c.y !== undefined;
+    if (xNum === yNum) {
+      fail(`${name}[${i}]: exactly one of x/y must be a number (the other null) — {x: V, y: null} vertical corridor, {x: null, y: H} horizontal`);
+    }
+    if (xNum) num(c.x, `${name}[${i}].x`);
+    if (yNum) num(c.y, `${name}[${i}].y`);
+    return { x: xNum ? c.x : null, y: yNum ? c.y : null };
+  });
+}

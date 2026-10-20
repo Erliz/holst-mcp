@@ -15,6 +15,7 @@ import {
   assertArrowEndpoint,
   assertStrokeStyle,
   assertMidwayControls,
+  assertElbowMidwayControls,
   assertBackgroundStyle,
   assertArrowhead,
   assertShapeType,
@@ -1076,6 +1077,7 @@ export async function addArrow(boardId, {
   fontSize,        // label font size
   textColor,       // label color (#RRGGBB)
   midwayControls, // issue #39: geometry shaping points, verbatim
+  elbowMidwayControls, // issue #39 elbow half: corridor constraints, verbatim
 }) {
   assertBoardId(boardId);
   assertBoardWritable(boardId);
@@ -1089,6 +1091,7 @@ export async function addArrow(boardId, {
   arrowheadStart = assertArrowhead(arrowheadStart, 'arrowheadStart');
   arrowheadEnd = assertArrowhead(arrowheadEnd, 'arrowheadEnd');
   midwayControls = assertMidwayControls(midwayControls, 'midwayControls');
+  elbowMidwayControls = assertElbowMidwayControls(elbowMidwayControls, 'elbowMidwayControls');
   if (text !== undefined) assertNoMarkdown(text);
   const texts = text === undefined ? null : buildArrowTexts(text, textPosition);
   const styleExtras = buildStyleExtras({ fontSize, textColor });
@@ -1097,7 +1100,7 @@ export async function addArrow(boardId, {
     const result = await session.evaluate(
       buildAddArrowExpr({
         start, end, arrowType, strokeColor, strokeStyle, strokeWidth,
-        arrowheadStart, arrowheadEnd, texts, styleExtras, midwayControls,
+        arrowheadStart, arrowheadEnd, texts, styleExtras, midwayControls, elbowMidwayControls,
       })
     );
     if (result?.__error) throw new Error(result.__error);

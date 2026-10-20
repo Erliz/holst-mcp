@@ -346,7 +346,7 @@ export function buildAddSimpleTextExpr({ x, y, width, styleExtras = {} }) {
  */
 export function buildAddArrowExpr({
   start, end, arrowType, strokeColor, strokeStyle, strokeWidth,
-  arrowheadStart, arrowheadEnd, texts, styleExtras = {}, midwayControls,
+  arrowheadStart, arrowheadEnd, texts, styleExtras = {}, midwayControls, elbowMidwayControls,
 }) {
   return `(() => {
     try {
@@ -396,6 +396,7 @@ export function buildAddArrowExpr({
         parentId: null,
         ${texts ? `texts: ${JSON.stringify(texts)},` : ''}
         ${midwayControls !== undefined ? `midwayControls: ${JSON.stringify(midwayControls)},` : ''}
+        ${elbowMidwayControls !== undefined ? `elbowMidwayControls: ${JSON.stringify(elbowMidwayControls)},` : ''}
         ${Object.keys(styleExtras).length ? `...${JSON.stringify(styleExtras)},` : ''}
       };
       for (const k of Object.keys(fields)) map.set(k, fields[k]);
@@ -531,6 +532,7 @@ export function buildBatchArrowsExpr(byIndex, arrows, arrowsBehind) {
           parentId: null,
           ...(a.texts ? { texts: a.texts } : {}),
           ...(a.midwayControls ? { midwayControls: a.midwayControls } : {}),
+          ...(a.elbowMidwayControls ? { elbowMidwayControls: a.elbowMidwayControls } : {}),
           ...(a.textColor !== undefined ? { textColor: a.textColor } : {}),
           ...(a.fontSize !== undefined ? { fontSize: a.fontSize } : {}),
         };
