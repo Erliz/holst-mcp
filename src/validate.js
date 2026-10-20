@@ -322,3 +322,28 @@ export function assertArrowEndpoint(ep, name) {
   num(ep.x, `${name}.x`);
   num(ep.y, `${name}.y`);
 }
+
+/**
+ * Arrow geometry shaping (issue #39): midwayControls — arbitrary absolute
+ * points [{ x, y }, ...] the app routes the arrow through (its own UI exposes
+ * them as draggable "elbows" on curved arrows). Pure passthrough: composing
+ * shapes like crossing hops from points is client-level geometry. Mirrors the
+ * app field verbatim; UI freehand examples use ~9 points, cap keeps dumps sane.
+ */
+export function assertMidwayControls(value, name) {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length === 0) {
+    fail(`${name} must be a non-empty array of { x, y } points`);
+  }
+  if (value.length > 100) {
+    fail(`${name} accepts at most 100 points, got ${value.length}`);
+  }
+  return value.map((p, i) => {
+    if (p === null || typeof p !== 'object' || Array.isArray(p)) {
+      fail(`${name}[${i}] must be an object { x, y }`);
+    }
+    num(p.x, `${name}[${i}].x`);
+    num(p.y, `${name}[${i}].y`);
+    return { x: p.x, y: p.y };
+  });
+}

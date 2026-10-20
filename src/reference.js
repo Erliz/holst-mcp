@@ -51,6 +51,10 @@ export function getReference() {
       defaults: 'absent fields = no start head, standard end head; arrowheadEnd: "none" disables the end head (axes, dividers); arrowheadStart adds a head at the start',
       strokeWidth: 'line thickness 0..100 (UI examples: 2 thin, 5 medium, 17 fat)',
     },
+    arrowGeometry: {
+      how: 'midwayControls: [{x, y}, ...] absolute board points the arrow routes through (add_arrow + batch; the UI shows them as draggable "elbows", verified on curved arrows); visible verbatim in get_board_content',
+      hop: 'no built-in hop/bridge primitive — compose crossing bumps yourself as a point sequence on the lighter arrow; a first-class hop belongs to the app',
+    },
     opacity: 'fillOpacity / strokeOpacity 0..1 in set_color (adjusts the opacity inside the color object, keeps the color); translucent washes e.g. fillOpacity 0.03',
     backgroundStyles: { values: BACKGROUND_STYLES, note: 'frames only: fill (background without border), fill-border (both), border-only (outline, fill ignored); absent field = app default look' },
     zOrder: 'zIndex field; batch options.arrowsBehind: true places connectors BELOW the created nodes (design-system layering). After-creation control: holst_set_z_order — placement front (above everything) / back (below everything, frames included) or absolute zIndex; current values are visible in holst_get_board_content',

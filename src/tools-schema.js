@@ -146,8 +146,8 @@ export const TOOLS = [
     description:
       'Create a whole diagram in ONE call — 10-15x faster than sequential add_* tools (30 objects in ~15s instead of minutes). ' +
       'objects: array of { kind: "shape"|"sticker"|"simple-text"|"frame"|"stamp", ref?: "name", text?, x, y, ...options } plus ' +
-      '{ kind: "arrow", from: { ref, relativePoint? }|{ x, y }, to: ..., text?, textPosition?, strokeStyle?, arrowheadStart?, arrowheadEnd?, strokeWidth? } — ' +
-      'arrows support on-arrow labels, dashed/dotted styles and headless variants (arrowhead*: "none"). ' +
+      '{ kind: "arrow", from: { ref, relativePoint? }|{ x, y }, to: ..., text?, textPosition?, strokeStyle?, arrowheadStart?, arrowheadEnd?, strokeWidth?, midwayControls?: [{x, y}, ...] } — ' +
+      'arrows support on-arrow labels, dashed/dotted styles, headless variants (arrowhead*: "none") and geometry shaping points (midwayControls). ' +
       'Text objects support typography: fontSize, textColor (#RRGGBB ok), horizontalAlign, bold/italic/underline/strikethrough. ' +
       'options.arrowsBehind: true places arrows BELOW the nodes (design-system layering). ' +
       'ref is a local name (letters/digits/dash/_); arrows link refs instead of UUIDs; refs auto-generate when omitted. ' +
@@ -302,6 +302,7 @@ export const TOOLS = [
     description:
       'Connect two points or objects. Endpoint = { x, y } for a free point, or { objectId, relativePoint: { x, y } } to attach (0..1 of object bounds; 0.5/1 = bottom center). Create endpoint objects FIRST — you need their ids. ' +
       'Optional text = on-arrow label; textPosition 0..1 places it along the path (default middle). ' +
+      'midwayControls: [{x, y}, ...] absolute points the arrow routes through — bend the geometry freely (verified on curved arrows); visible in get_board_content. ' +
       'arrowheadStart/arrowheadEnd: none | miro | arc | figma (absent = default: no start head, standard end head; "none" disables). ' +
       'strokeStyle: solid (default), dashed, dotted. strokeWidth: line thickness. fontSize/textColor style the label; colors are #RRGGBB hex.',
     inputSchema: {
@@ -324,6 +325,10 @@ export const TOOLS = [
         arrowheadEnd: { type: 'string', description: 'none (disables default head), miro, arc, figma' },
         text: { type: 'string', description: 'On-arrow label (\\n = new line)' },
         textPosition: { type: 'number', default: 0.5, description: 'Label position along the arrow, 0..1 (0.5 = middle)' },
+        midwayControls: {
+          type: 'array',
+          description: 'Geometry shaping: absolute [{ x, y }] board points the arrow routes through (verified on curved arrows; the UI shows them as draggable "elbows"). Compose crossing hops/bumps yourself as point sequences — there is no built-in hop primitive. Max 100 points.',
+        },
         fontSize: { type: 'number', description: 'Label font size in px' },
         textColor: { type: 'string', description: 'Label color: #RRGGBB' },
       },

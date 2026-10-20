@@ -338,6 +338,75 @@ export function buildAddSimpleTextExpr({ x, y, width, styleExtras = {} }) {
   })()`;
 }
 
+/**
+ * Create an arrow object (issue #39 extraction from holst.js so the write-path
+ * is unit-testable). Values are PRE-VALIDATED by addArrow. midwayControls
+ * (issue #39) rides verbatim: absolute [{ x, y }] points the app routes the
+ * arrow through — its UI exposes them as draggable "elbows".
+ */
+export function buildAddArrowExpr({
+  start, end, arrowType, strokeColor, strokeStyle, strokeWidth,
+  arrowheadStart, arrowheadEnd, texts, styleExtras = {}, midwayControls,
+}) {
+  return `(() => {
+    try {
+      const yDoc = window.ds.yPersistence.yDoc;
+      const Yjs = window.Yjs;
+      const yObjects = yDoc.getMap('objects');
+      const newId = (window.crypto || crypto).randomUUID();
+      let maxZ = 0;
+      for (const [, v] of yObjects.entries()) {
+        const z = v && v.get ? v.get('zIndex') : (v && v.zIndex);
+        if (typeof z === 'number' && z > maxZ) maxZ = z;
+      }
+      const map = new Yjs.Map();
+      const start = ${JSON.stringify(start)};
+      const end = ${JSON.stringify(end)};
+      // Normalize endpoints to Holst format
+      function normalize(ep) {
+        if (ep.objectId) {
+          return {
+            objectId: ep.objectId,
+            point: ep.point || { x: 0, y: 0 },
+            relativePoint: ep.relativePoint || { x: 0.5, y: 0.5 },
+            control: ep.control ?? null,
+          };
+        }
+        return {
+          point: { x: ep.x, y: ep.y },
+          relativePoint: { x: 0, y: 0 },
+          control: null,
+        };
+      }
+      const fields = {
+        type: 'arrow',
+        arrowType: ${JSON.stringify(arrowType)},
+        ${strokeStyle !== 'solid' ? `strokeStyle: ${JSON.stringify(strokeStyle)},` : ''}
+        strokeColor: { color: ${JSON.stringify(strokeColor)}, opacity: 1 },
+        ${strokeWidth !== undefined ? `strokeWidth: ${Number(strokeWidth)},` : ''}
+        ${arrowheadStart !== undefined ? `arrowheadStart: ${JSON.stringify(arrowheadStart)},` : ''}
+        ${arrowheadEnd !== undefined ? `arrowheadEnd: ${JSON.stringify(arrowheadEnd)},` : ''}
+        position: { x: 0, y: 0 },
+        start: normalize(start),
+        end: normalize(end),
+        zIndex: maxZ + 1,
+        created: { a: 0, t: Date.now() },
+        updated: null,
+        id: newId,
+        parentId: null,
+        ${texts ? `texts: ${JSON.stringify(texts)},` : ''}
+        ${midwayControls !== undefined ? `midwayControls: ${JSON.stringify(midwayControls)},` : ''}
+        ${Object.keys(styleExtras).length ? `...${JSON.stringify(styleExtras)},` : ''}
+      };
+      for (const k of Object.keys(fields)) map.set(k, fields[k]);
+      yDoc.transact(() => {
+        yObjects.set(newId, map);
+      });
+      return { ok: true, id: newId };
+    } catch (e) { return { __error: String(e), stack: e.stack }; }
+  })()`;
+}
+
 /** Batch phase 1a: create non-arrow objects in one pass. */
 export function buildBatchCreationExpr(chunk) {
   return `(() => {
@@ -461,6 +530,7 @@ export function buildBatchArrowsExpr(byIndex, arrows, arrowsBehind) {
           id: newId,
           parentId: null,
           ...(a.texts ? { texts: a.texts } : {}),
+          ...(a.midwayControls ? { midwayControls: a.midwayControls } : {}),
           ...(a.textColor !== undefined ? { textColor: a.textColor } : {}),
           ...(a.fontSize !== undefined ? { fontSize: a.fontSize } : {}),
         };
