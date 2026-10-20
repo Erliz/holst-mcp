@@ -505,11 +505,11 @@ export function buildBatchArrowsExpr(byIndex, arrows, arrowsBehind) {
         }
         const normalize = (ep) => {
           if (ep.refIndex !== undefined) {
-            return { objectId: byIndex[ep.refIndex].id, point: { x: 0, y: 0 }, relativePoint: ep.relativePoint || { x: 0.5, y: 0.5 }, control: null };
+            return { objectId: byIndex[ep.refIndex].id, point: { x: 0, y: 0 }, relativePoint: ep.relativePoint || { x: 0.5, y: 0.5 }, control: ep.control ?? null };
           }
           if (ep.objectId !== undefined) {
             // existing board object — attaching to a live diagram
-            return { objectId: ep.objectId, point: { x: 0, y: 0 }, relativePoint: ep.relativePoint || { x: 0.5, y: 0.5 }, control: null };
+            return { objectId: ep.objectId, point: { x: 0, y: 0 }, relativePoint: ep.relativePoint || { x: 0.5, y: 0.5 }, control: ep.control ?? null };
           }
           return { point: ep.point, relativePoint: { x: 0, y: 0 }, control: null };
         };

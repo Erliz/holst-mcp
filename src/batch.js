@@ -2,7 +2,7 @@
 // shared validators, assigns refs, orders creations before arrows, and
 // resolves arrow ref-endpoints to creation indexes. Pure — no side effects.
 
-import { ValidationError, assertText, assertNoMarkdown, num, safeToken, assertStrokeStyle, assertOpacity, assertBorderRadius, assertRuns, assertShapeType, assertArrowType, assertObjectId, parseColor, assertArrowhead, assertBackgroundStyle, assertMidwayControls, assertElbowMidwayControls } from './validate.js';
+import { ValidationError, assertText, assertNoMarkdown, num, safeToken, assertStrokeStyle, assertOpacity, assertBorderRadius, assertRuns, assertShapeType, assertArrowType, assertObjectId, parseColor, assertArrowhead, assertBackgroundStyle, assertMidwayControls, assertElbowMidwayControls, assertEndpointControl } from './validate.js';
 import { buildStyleExtras, pxToTextScale } from './text-style.js';
 
 const KINDS = ['shape', 'sticker', 'simple-text', 'frame', 'stamp', 'arrow'];
@@ -30,6 +30,8 @@ function endpoint(ep, label, index) {
         y: num(ep.relativePoint.y, `objects[${index}].${label}.relativePoint.y`),
       };
     }
+    const control = assertEndpointControl(ep.control, `objects[${index}].${label}.control`);
+    if (control !== undefined) out.control = control;
     return out;
   }
   // Existing board object — lets a batch attach arrows to a live diagram.
@@ -45,7 +47,12 @@ function endpoint(ep, label, index) {
         y: num(ep.relativePoint.y, `objects[${index}].${label}.relativePoint.y`),
       };
     }
+    const control = assertEndpointControl(ep.control, `objects[${index}].${label}.control`);
+    if (control !== undefined) out.control = control;
     return out;
+  }
+  if (ep.control !== undefined) {
+    throw new ValidationError(`objects[${index}].${label}.control is only valid on object endpoints ({ ref } / { objectId }), not free points { x, y }`);
   }
   return {
     point: {
