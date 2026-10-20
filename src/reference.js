@@ -40,6 +40,13 @@ export function getReference() {
       borderRadius: 'shape corner rounding px — borderRadius = height/2 → capsule/pill shape',
       multiline: '\\n = new paragraph — works in add_* and batch (textOk reflects it)',
     },
+    measureText: {
+      returns: 'holst_measure_text — how text will RENDER before creating objects, from the board app\'s own loaded fonts: { widthPx, heightPx, lineHeightPx, lines: [{ text, widthPx }] }; multiline \\n measured per line, widthPx = widest line',
+      pureRead: 'nothing is created, works on read-only boards',
+      params: 'text, fontSize (px, same unit as add_* typography), fontFamily REQUIRED (token resolved against the app\'s loaded fonts; unknown → error listing available families), bold, italic, letterSpacing (px float, -10..100)',
+      gotcha: 'rendered metrics differ from nominal ones — SourceCodePro measures ~0.72em/char, NOT the nominal 0.6; bold caps ~0.9em; sizing boxes by rule of thumb overflows',
+      pattern: 'measure first, then create with width ≥ widthPx + padding — sizes shapes/chips/labels in one pass',
+    },
     shapeTypes: {
       verified: SHAPE_TYPES,
       note: 'whitelist-validated; "rhombus" does NOT exist (silently rendered as rectangle before v0.5) — the rhombus token is diamond',

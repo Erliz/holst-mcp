@@ -84,6 +84,26 @@ describe('getReference', () => {
     assert.match(gbc.shaping, /\{type,x,y,w,h\}/);
   });
 
+  test('documents measure_text — rendered metrics before creating objects (issue #58)', () => {
+    assert.ok(ref.measureText, 'measureText section missing');
+    const mt = ref.measureText;
+    // return shape mirrors the tool schema verbatim
+    assert.match(mt.returns, /holst_measure_text/);
+    assert.match(mt.returns, /widthPx, heightPx, lineHeightPx/);
+    assert.match(mt.returns, /lines: \[\{ text, widthPx \}\]/);
+    assert.match(mt.returns, /widest line/);
+    // pure read: read-only boards OK
+    assert.match(mt.pureRead, /read-only/);
+    // rendered metrics, not nominal mono widths
+    assert.match(mt.gotcha, /0\.72em/);
+    assert.match(mt.gotcha, /NOT the nominal 0\.6/);
+    assert.match(mt.gotcha, /0\.9em/);
+    // sizing pattern: measure first, pad after
+    assert.match(mt.pattern, /width ≥ widthPx \+ padding/);
+    // fontFamily is the required token param, resolved against loaded fonts
+    assert.match(mt.params, /fontFamily REQUIRED/);
+  });
+
   test('documents renderer dash derivation — no custom dasharray (issue #40)', async () => {
     // values stay the enum (same source of truth as validators)
     const { STROKE_STYLES } = await import('../src/validate.js');
