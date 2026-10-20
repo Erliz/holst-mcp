@@ -39,4 +39,17 @@ describe('getReference', () => {
     assert.equal(ref.limits.textMaxLen, 100000);
     assert.equal(ref.limits.coordAbsMax, 1e7);
   });
+
+  test('documents counting rules: summary vs raw dump (issue #11)', () => {
+    assert.ok(ref.countingRules, 'countingRules section missing');
+    // live-object counts come from the flat objects map only
+    assert.match(ref.countingRules.liveObjects, /content\.objects/);
+    // the raw dump carries the delete audit with full snapshots of deleted objects
+    assert.match(ref.countingRules.rawDump, /delete-events-metaStore/);
+    assert.match(ref.countingRules.rawDump, /deleted/i);
+    // documents may outlive their objects
+    assert.match(ref.countingRules.documents, /orphan/i);
+    // summary sub-counts filter by non-empty text
+    assert.match(ref.countingRules.summary, /non-empty text/i);
+  });
 });

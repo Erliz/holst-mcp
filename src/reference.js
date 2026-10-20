@@ -54,6 +54,12 @@ export function getReference() {
     opacity: 'fillOpacity / strokeOpacity 0..1 in set_color (adjusts the opacity inside the color object, keeps the color); translucent washes e.g. fillOpacity 0.03',
     backgroundStyles: { values: BACKGROUND_STYLES, note: 'frames only: fill (background without border), fill-border (both), border-only (outline, fill ignored); absent field = app default look' },
     zOrder: 'zIndex field; batch options.arrowsBehind: true places connectors BELOW the created nodes (design-system layering). After-creation control: holst_set_z_order — placement front (above everything) / back (below everything, frames included) or absolute zIndex; current values are visible in holst_get_board_content',
+    countingRules: {
+      liveObjects: 'the ONLY source of live-object counts is the flat content.objects map (get_board_content / get_board_summary / holst_search_text all count exactly its keys — count Object.keys(content.objects), never scan the whole dump for "type" fields)',
+      rawDump: 'get_board_content returns the whole yDoc, not just objects: delete-events-metaStore is the app delete audit — every entry carries full snapshots (s[]) of DELETED objects with ordinary type fields, so a naive type-scan counts deleted objects as live (2 live frames + 5 deleted snapshots = "7 frames"). kanban-*/reactions/task-card-* stores are auxiliary and usually empty. Count ONLY content.objects; treat everything else as history/metadata',
+      documents: 'content.documents may contain orphaned docs whose objects were deleted — documents count ≠ objects count (docs are never cleaned up on delete)',
+      summary: 'holst_get_board_summary «Объектов» = ALL live objects in content.objects (any type, including empty-text ones); sub-counts «стикеров»/«секций»/«текстовых меток» include ONLY objects with non-empty text; «стрелок» = all arrows; frames and stamps appear only in «Объектов» (frames also listed in the Фреймы section, arrows in Стрелки) — sub-counts intentionally do NOT sum to «Объектов»',
+    },
     arrowLabels: {
       how: 'add_arrow / batch arrow entry: text + textPosition (0..1 along the path, default 0.5 middle); update later via holst_update_text on the arrow id',
       storage: 'plain texts field on the arrow object (no documentId) — visible in get_board_content as texts[]',
