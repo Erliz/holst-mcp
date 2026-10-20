@@ -34,7 +34,10 @@ Everything below is operational knowledge you need — no external files require
 - Arrows attach to objects: \`{ objectId, relativePoint: { x, y } }\`, relativePoint in 0..1
   of the object bounds (0.5/0.5 = center, 0.5/1 = bottom edge center).
 - Arrow labels: pass \`text\` (+ optional \`textPosition\` 0..1) to \`holst_add_arrow\` or a batch
-  arrow entry; rewrite later with \`holst_update_text\` on the arrow id. Stroke styles:
+  arrow entry; rewrite later with \`holst_update_text\` on the arrow id. \`labelSide\`:
+  on (default, masked on the line) | left | right — beside the segment with a fixed 7px
+  gap (right = +x side; below for horizontal segments); \`textRotated: true\` turns the
+  label along the arrow. No background color exists on arrow labels. Stroke styles:
   \`strokeStyle\` solid (default) / dashed / dotted on add_arrow and holst_set_color.
 - Arrowheads: \`arrowheadStart\`/\`arrowheadEnd\` = none | miro | arc | figma. Headless axes/dividers:
   \`arrowheadEnd: "none"\`. \`strokeWidth\` sets line thickness.

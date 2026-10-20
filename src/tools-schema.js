@@ -146,13 +146,13 @@ export const TOOLS = [
     description:
       'Create a whole diagram in ONE call — 10-15x faster than sequential add_* tools (30 objects in ~15s instead of minutes). ' +
       'objects: array of { kind: "shape"|"sticker"|"simple-text"|"frame"|"stamp", ref?: "name", text?, x, y, ...options } plus ' +
-      '{ kind: "arrow", from: { ref, relativePoint?, control? }|{ x, y }, to: ..., text?, textPosition?, strokeStyle?, arrowheadStart?, arrowheadEnd?, strokeWidth?, midwayControls?: [{x, y}, ...], elbowMidwayControls?: [{x: V, y: null}|{x: null, y: H}, ...] } — ' +
-      'arrows support on-arrow labels, dashed/dotted styles, headless variants (arrowhead*: "none"), geometry shaping (midwayControls = free points on curved, elbowMidwayControls = corridor lines on elbow) and port control (endpoint control: top|right|bottom|left pins the exit side). ' +
+      '{ kind: "arrow", from: { ref, relativePoint?, control? }|{ x, y }, to: ..., text?, textPosition?, labelSide?, textRotated?, strokeStyle?, arrowheadStart?, arrowheadEnd?, strokeWidth?, midwayControls?: [{x, y}, ...], elbowMidwayControls?: [{x: V, y: null}|{x: null, y: H}, ...] } — ' +
+      'arrows support on-arrow labels (labelSide left/right = beside the segment with a 7px gap; textRotated = along the arrow), dashed/dotted styles, headless variants (arrowhead*: "none"), geometry shaping (midwayControls = free points on curved, elbowMidwayControls = corridor lines on elbow) and port control (endpoint control: top|right|bottom|left pins the exit side). ' +
       'Text objects support typography: fontSize, textColor (#RRGGBB ok), horizontalAlign, bold/italic/underline/strikethrough. ' +
       'options.arrowsBehind: true places arrows BELOW the nodes (design-system layering). ' +
       'ref is a local name (letters/digits/dash/_); arrows link refs instead of UUIDs; refs auto-generate when omitted. ' +
-      'Result maps each ref to { id, documentId, mounted, textOk } (arrows: textOk = on-arrow label verified in the render layer; null = no label) — verify with holst_get_board_summary afterwards. ' +
-      'textFailedRefs lists refs (objects AND arrows) whose text did not land — ok:false until you follow up with holst_update_text. ' +
+      'Result maps each ref to { id, documentId, mounted, textOk } (arrows: textOk = on-arrow label verified in the render layer, null = no label; sideOk = labelSide applied, set only when labelSide ≠ on) — verify with holst_get_board_summary afterwards. ' +
+      'textFailedRefs lists refs (objects AND arrows) whose text did not land, sideFailedRefs arrows whose labelSide could not be applied — ok:false until you follow up with holst_update_text. ' +
       'Same fields/validation as the individual add_* tools; colors are #RRGGBB hex; frames accept backgroundStyle (fill / fill-border / border-only); top-left coords, batch limit 200.',
     inputSchema: {
       type: 'object',
@@ -301,7 +301,7 @@ export const TOOLS = [
     name: 'holst_add_arrow',
     description:
       'Connect two points or objects. Endpoint = { x, y } for a free point, or { objectId, relativePoint: { x, y } } to attach (0..1 of object bounds; 0.5/1 = bottom center); object endpoints also take optional control: top|right|bottom|left — pins the side the arrow leaves from (port control). Create endpoint objects FIRST — you need their ids. ' +
-      'Optional text = on-arrow label; textPosition 0..1 places it along the path (default middle). ' +
+      'Optional text = on-arrow label; textPosition 0..1 places it along the path (default middle); labelSide left/right puts it beside the segment (7px gap, no background possible on arrow labels); textRotated rotates it along the arrow. ' +
       'midwayControls: [{x, y}, ...] absolute points the arrow routes through — bend the geometry freely (verified on curved arrows); elbowMidwayControls: corridor lines for elbow arrows — both visible in get_board_content. ' +
       'arrowheadStart/arrowheadEnd: none | miro | arc | figma (absent = default: no start head, standard end head; "none" disables). ' +
       'strokeStyle: solid (default), dashed, dotted — the dash is derived from style+width (no custom dasharray; math in holst_reference arrowStrokeStyles). strokeWidth: line thickness. fontSize/textColor style the label; colors are #RRGGBB hex.',
@@ -325,6 +325,12 @@ export const TOOLS = [
         arrowheadEnd: { type: 'string', description: 'none (disables default head), miro, arc, figma' },
         text: { type: 'string', description: 'On-arrow label (\\n = new line)' },
         textPosition: { type: 'number', default: 0.5, description: 'Label position along the arrow, 0..1 (0.5 = middle)' },
+        labelSide: {
+          type: 'string',
+          default: 'on',
+          description: "Where the label sits (needs text): 'on' = on the line (renderer masks the stroke behind it); 'left'/'right' = beside the segment with a fixed 7px gap — right = +x side of the segment (below for horizontal segments). Resolved against the rendered geometry after mount; later endpoint edits may re-side it. Arrow labels have NO background color",
+        },
+        textRotated: { type: 'boolean', description: 'Rotate the label to follow the arrow direction (default: horizontal text)' },
         midwayControls: {
           type: 'array',
           description: 'Geometry shaping: absolute [{ x, y }] board points the arrow routes through. CURVED arrows only — the elbow renderer ignores them (live-verified). Compose crossing hops/bumps yourself as point sequences — there is no built-in hop primitive. Max 100 points.',
