@@ -13,6 +13,10 @@ const OBJECT_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 // Type tokens (shapeType, arrowType, stampType): letters, digits, dashes (round-rect, textStamp).
 const TOKEN_RE = /^[A-Za-z][A-Za-z0-9-]{0,31}$/;
 
+// Board-space coordinate range, shared by every coordinate path (single
+// source of truth; batch.js and holst.js import this — issue #62).
+export const COORD = { min: -1e7, max: 1e7 };
+
 function fail(message) {
   throw new ValidationError(message);
 }
@@ -391,6 +395,7 @@ export function assertEndpointControl(value, name) {
  * them as draggable "elbows" on curved arrows). Pure passthrough: composing
  * shapes like crossing hops from points is client-level geometry. Mirrors the
  * app field verbatim; UI freehand examples use ~9 points, cap keeps dumps sane.
+ * Coordinates are board-space: same ±1e7 COORD cap as x/y everywhere (issue #62).
  */
 export function assertMidwayControls(value, name) {
   if (value === undefined) return undefined;
@@ -404,8 +409,8 @@ export function assertMidwayControls(value, name) {
     if (p === null || typeof p !== 'object' || Array.isArray(p)) {
       fail(`${name}[${i}] must be an object { x, y }`);
     }
-    num(p.x, `${name}[${i}].x`);
-    num(p.y, `${name}[${i}].y`);
+    num(p.x, `${name}[${i}].x`, COORD);
+    num(p.y, `${name}[${i}].y`, COORD);
     return { x: p.x, y: p.y };
   });
 }
@@ -415,7 +420,8 @@ export function assertMidwayControls(value, name) {
  * arrows through corridor LINES — {x: V, y: null} = pass the vertical line
  * x=V, {x: null, y: H} = pass the horizontal line y=H, applied in order.
  * Exactly one of x/y must be a finite number; the other is normalized to the
- * app's canonical null. Shape captured from a UI-drawn zigzag (live round-trip).
+ * app's canonical null. Corridor coordinates share the ±1e7 COORD cap (issue #62).
+ * Shape captured from a UI-drawn zigzag (live round-trip).
  */
 export function assertElbowMidwayControls(value, name) {
   if (value === undefined) return undefined;
@@ -434,8 +440,8 @@ export function assertElbowMidwayControls(value, name) {
     if (xNum === yNum) {
       fail(`${name}[${i}]: exactly one of x/y must be a number (the other null) — {x: V, y: null} vertical corridor, {x: null, y: H} horizontal`);
     }
-    if (xNum) num(c.x, `${name}[${i}].x`);
-    if (yNum) num(c.y, `${name}[${i}].y`);
+    if (xNum) num(c.x, `${name}[${i}].x`, COORD);
+    if (yNum) num(c.y, `${name}[${i}].y`, COORD);
     return { x: xNum ? c.x : null, y: yNum ? c.y : null };
   });
 }

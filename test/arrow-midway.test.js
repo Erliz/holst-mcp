@@ -72,6 +72,24 @@ describe('assertMidwayControls (issue #39: arrow geometry points)', () => {
       ValidationError
     );
   });
+
+  // Issue #62: every other coordinate path is capped at ±1e7 (COORD in
+  // batch.js / holst.js) — huge-but-finite values must not reach the yDoc.
+  test('out-of-range coordinates are rejected with the point index in the path', () => {
+    assert.throws(
+      () => assertMidwayControls([{ x: 1e7 + 1, y: 0 }], 'midwayControls'),
+      /midwayControls\[0\]\.x must be between -10000000 and 10000000/
+    );
+    assert.throws(
+      () => assertMidwayControls([{ x: 0, y: -1e7 - 1 }], 'midwayControls'),
+      /midwayControls\[0\]\.y must be between/
+    );
+  });
+
+  test('boundary coordinates ±1e7 are accepted', () => {
+    const out = assertMidwayControls([{ x: 1e7, y: -1e7 }], 'midwayControls');
+    assert.deepEqual(out, [{ x: 1e7, y: -1e7 }]);
+  });
 });
 
 describe('buildAddArrowExpr: midwayControls reach the yDoc write', () => {  const base = {
@@ -212,6 +230,23 @@ describe('assertElbowMidwayControls (issue #39: elbow corridors)', () => {
       () => assertElbowMidwayControls([{ x: Infinity, y: null }], 'elbowMidwayControls'),
       ValidationError
     );
+  });
+
+  // Issue #62: ±1e7 parity with every other coordinate path.
+  test('out-of-range corridor coordinate is rejected with its index in the path', () => {
+    assert.throws(
+      () => assertElbowMidwayControls([{ x: 1e8, y: null }], 'elbowMidwayControls'),
+      /elbowMidwayControls\[0\]\.x must be between -10000000 and 10000000/
+    );
+    assert.throws(
+      () => assertElbowMidwayControls([{ x: null, y: -1e8 }], 'elbowMidwayControls'),
+      /elbowMidwayControls\[0\]\.y must be between/
+    );
+  });
+
+  test('boundary corridor coordinates ±1e7 are accepted', () => {
+    const out = assertElbowMidwayControls([{ x: 1e7, y: null }, { x: null, y: -1e7 }], 'elbowMidwayControls');
+    assert.deepEqual(out, [{ x: 1e7, y: null }, { x: null, y: -1e7 }]);
   });
 });
 
