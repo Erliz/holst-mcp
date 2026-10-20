@@ -58,4 +58,19 @@ describe('getReference', () => {
     // the cap applies to the trimmed content, not the raw history
     assert.match(ref.limits.HOLST_MAX_DUMP_BYTES, /trim/i);
   });
+
+  test('documents renderer dash derivation — no custom dasharray (issue #40)', async () => {
+    // values stay the enum (same source of truth as validators)
+    const { STROKE_STYLES } = await import('../src/validate.js');
+    assert.deepEqual(ref.arrowStrokeStyles.values, STROKE_STYLES);
+    // the renderer derives the dash from style + strokeWidth — no passthrough exists
+    assert.match(ref.arrowStrokeStyles.dashPatterns, /max\(10,\s*2w\)/);
+    assert.match(ref.arrowStrokeStyles.dashPatterns, /\+w/);
+    assert.match(ref.arrowStrokeStyles.dashPatterns, /0\.5w,\s*2w/);
+    assert.match(ref.arrowStrokeStyles.dashPatterns, /no custom dasharray/i);
+    // silent-fallback warning: alien values render solid
+    assert.match(ref.arrowStrokeStyles.dashPatterns, /solid/i);
+    // build pin so future runs can re-verify
+    assert.match(ref.arrowStrokeStyles.dashPatterns, /26a4e8fd/);
+  });
 });

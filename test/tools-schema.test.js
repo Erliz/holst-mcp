@@ -106,4 +106,10 @@ describe('schema/dispatch consistency (v0.5 regression guard)', () => {
     assert.deepEqual(r.shapeTypes.verified, SHAPE_TYPES);
     assert.deepEqual(r.arrowTypes, ARROW_TYPES);
   });
+
+  test('strokeStyle description warns the dash is derived, not custom (issue #40)', () => {
+    const arrow = byName.get('holst_add_arrow');
+    assert.match(arrow.inputSchema.properties.strokeStyle.description, /no custom dasharray/i);
+    assert.match(arrow.inputSchema.properties.strokeStyle.description, /derived/i);
+  });
 });

@@ -45,7 +45,16 @@ export function getReference() {
       note: 'whitelist-validated; "rhombus" does NOT exist (silently rendered as rectangle before v0.5) — the rhombus token is diamond',
     },
     arrowTypes: ARROW_TYPES,
-    arrowStrokeStyles: STROKE_STYLES,
+    arrowStrokeStyles: {
+      values: STROKE_STYLES,
+      dashPatterns:
+        'no custom dasharray exists — the renderer derives the dash from strokeStyle + strokeWidth w ' +
+        '(verified 2026-10-20 against app build main.26a4e8fd.js, issue #40): ' +
+        'dashed = [max(10, 2w), max(10, 2w)+w], dotted = round-cap dots [0.5w, 2w]; ' +
+        'any other strokeStyle value silently renders solid. Two distinct dashed rhythms are NOT expressible — ' +
+        'pick dashed vs dotted, or scale strokeWidth (that also thickens the line). ' +
+        'Shape/frame borders use different (unverified) math — this note is arrows-only',
+    },
     arrowheads: {
       values: ['none', 'miro', 'arc', 'figma'],
       defaults: 'absent fields = no start head, standard end head; arrowheadEnd: "none" disables the end head (axes, dividers); arrowheadStart adds a head at the start',

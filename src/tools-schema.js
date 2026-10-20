@@ -15,7 +15,7 @@ export // Descriptions GENERATED from validate.js enums — single source of tru
 // Editing a token list in validate.js updates these automatically; the
 // tools-schema test asserts descriptions match the enum data.
 const SHAPE_TYPES_DESC = SHAPE_TYPES.join(', ') + ' (whitelist; \"rhombus\" does NOT exist — use diamond)';
-const STROKE_STYLES_DESC = STROKE_STYLES.filter((s) => s !== 'solid').join(', ') + ' (default solid)';
+const STROKE_STYLES_DESC = STROKE_STYLES.filter((s) => s !== 'solid').join(', ') + ' (default solid); the dash is derived from style + strokeWidth — no custom dasharray (see holst_reference arrowStrokeStyles)';
 
 const ADD_NOTE =
   'NOTE: takes 3-8s (editor settle) — slow is normal, never retry on slowness. ' +
@@ -304,7 +304,7 @@ export const TOOLS = [
       'Optional text = on-arrow label; textPosition 0..1 places it along the path (default middle). ' +
       'midwayControls: [{x, y}, ...] absolute points the arrow routes through — bend the geometry freely (verified on curved arrows); elbowMidwayControls: corridor lines for elbow arrows — both visible in get_board_content. ' +
       'arrowheadStart/arrowheadEnd: none | miro | arc | figma (absent = default: no start head, standard end head; "none" disables). ' +
-      'strokeStyle: solid (default), dashed, dotted. strokeWidth: line thickness. fontSize/textColor style the label; colors are #RRGGBB hex.',
+      'strokeStyle: solid (default), dashed, dotted — the dash is derived from style+width (no custom dasharray; math in holst_reference arrowStrokeStyles). strokeWidth: line thickness. fontSize/textColor style the label; colors are #RRGGBB hex.',
     inputSchema: {
       type: 'object',
       properties: {
