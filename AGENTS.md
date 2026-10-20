@@ -8,6 +8,7 @@ Electron-приложению. Форк: `Erliz/holst-mcp` (issues и PR жив�
 - `npm test` — все тесты (`node --test`). Самодостаточные: `test/helpers/fake-holst.js`
   подменяет CDP, приложение Holst не нужно
 - `npm start` — запуск MCP-сервера
+- `/release [x.y.z]` — подготовка версии: CHANGELOG, package.json, PR, тег и release-страница
 
 ## Конвейер issues
 
