@@ -2,7 +2,7 @@
 // shared validators, assigns refs, orders creations before arrows, and
 // resolves arrow ref-endpoints to creation indexes. Pure — no side effects.
 
-import { COORD, ValidationError, assertText, assertNoMarkdown, num, safeToken, assertStrokeStyle, assertOpacity, assertBorderRadius, assertRuns, assertShapeType, assertArrowType, assertObjectId, parseColor, assertArrowhead, assertBackgroundStyle, assertMidwayControls, assertElbowMidwayControls, assertEndpointControl, assertLabelSide, assertLabelSideHasText } from './validate.js';
+import { COORD, RELATIVE_POINT, ValidationError, assertText, assertNoMarkdown, num, safeToken, assertStrokeStyle, assertOpacity, assertBorderRadius, assertRuns, assertShapeType, assertArrowType, assertObjectId, parseColor, assertArrowhead, assertBackgroundStyle, assertMidwayControls, assertElbowMidwayControls, assertEndpointControl, assertLabelSide, assertLabelSideHasText } from './validate.js';
 import { buildStyleExtras, pxToTextScale } from './text-style.js';
 
 const KINDS = ['shape', 'sticker', 'simple-text', 'frame', 'stamp', 'arrow'];
@@ -26,8 +26,8 @@ function endpoint(ep, label, index) {
         throw new ValidationError(`objects[${index}].${label}.relativePoint must be { x, y }`);
       }
       out.relativePoint = {
-        x: num(ep.relativePoint.x, `objects[${index}].${label}.relativePoint.x`),
-        y: num(ep.relativePoint.y, `objects[${index}].${label}.relativePoint.y`),
+        x: num(ep.relativePoint.x, `objects[${index}].${label}.relativePoint.x`, RELATIVE_POINT),
+        y: num(ep.relativePoint.y, `objects[${index}].${label}.relativePoint.y`, RELATIVE_POINT),
       };
     }
     const control = assertEndpointControl(ep.control, `objects[${index}].${label}.control`);
@@ -43,8 +43,8 @@ function endpoint(ep, label, index) {
         throw new ValidationError(`objects[${index}].${label}.relativePoint must be { x, y }`);
       }
       out.relativePoint = {
-        x: num(ep.relativePoint.x, `objects[${index}].${label}.relativePoint.x`),
-        y: num(ep.relativePoint.y, `objects[${index}].${label}.relativePoint.y`),
+        x: num(ep.relativePoint.x, `objects[${index}].${label}.relativePoint.x`, RELATIVE_POINT),
+        y: num(ep.relativePoint.y, `objects[${index}].${label}.relativePoint.y`, RELATIVE_POINT),
       };
     }
     const control = assertEndpointControl(ep.control, `objects[${index}].${label}.control`);
