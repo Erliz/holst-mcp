@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 // a down-going vertical (0,1) with anchor 1 renders at +x ("ritght").
 
 import { labelSideToAnchor, buildArrowTexts } from '../src/arrow-text.js';
-import { assertLabelSide, ValidationError } from '../src/validate.js';
+import { assertLabelSide, assertLabelSideHasText, ValidationError } from '../src/validate.js';
 import { buildBatchPlan } from '../src/batch.js';
 import { runExpr } from './helpers/fake-holst.js';
 import {
@@ -87,6 +87,37 @@ describe('assertLabelSide (tool input validation)', () => {
   });
 });
 
+describe('assertLabelSideHasText (issue #61: cross-field fail-fast)', () => {
+  test('left/right without text rejected', () => {
+    assert.throws(() => assertLabelSideHasText('left', undefined), ValidationError);
+    assert.throws(() => assertLabelSideHasText('right', undefined), ValidationError);
+  });
+
+  test("empty-string text counts as missing", () => {
+    assert.throws(() => assertLabelSideHasText('left', ''), ValidationError);
+  });
+
+  test("'on' without text stays the documented no-op", () => {
+    assert.doesNotThrow(() => assertLabelSideHasText('on', undefined));
+    assert.doesNotThrow(() => assertLabelSideHasText('on', ''));
+  });
+
+  test('undefined side passes (no labelSide requested)', () => {
+    assert.doesNotThrow(() => assertLabelSideHasText(undefined, undefined));
+  });
+
+  test('side with text passes', () => {
+    assert.doesNotThrow(() => assertLabelSideHasText('left', 'label'));
+  });
+
+  test('error message carries the caller-scoped name and the side', () => {
+    assert.throws(
+      () => assertLabelSideHasText('left', undefined, 'objects[0].labelSide'),
+      /objects\[0\]\.labelSide "left" requires label text/
+    );
+  });
+});
+
 describe('buildBatchPlan: arrow labelSide / textRotated', () => {
   const base = { kind: 'arrow', from: { x: 0, y: 0 }, to: { x: 0, y: 100 } };
 
@@ -104,6 +135,20 @@ describe('buildBatchPlan: arrow labelSide / textRotated', () => {
 
   test('bad labelSide rejected', () => {
     assert.throws(() => buildBatchPlan([{ ...base, text: 'x', labelSide: 'top' }]), ValidationError);
+  });
+
+  test('labelSide without text rejected (issue #61: fail fast, not silent drop)', () => {
+    assert.throws(() => buildBatchPlan([{ ...base, labelSide: 'left' }]), ValidationError);
+  });
+
+  test("text: '' with labelSide rejected same as missing (issue #61)", () => {
+    assert.throws(() => buildBatchPlan([{ ...base, text: '', labelSide: 'right' }]), ValidationError);
+  });
+
+  test("labelSide 'on' without text stays valid — documented no-op (issue #61)", () => {
+    const plan = buildBatchPlan([{ ...base, labelSide: 'on' }]);
+    assert.equal(plan.arrows[0].labelSide, 'on');
+    assert.equal(plan.arrows[0].text, undefined);
   });
 
   test('textRotated coerces to boolean (repo convention for flags)', () => {
