@@ -72,6 +72,11 @@ describe('schema/dispatch consistency (v0.5 regression guard)', () => {
     assert.match(t.description, /delete-events/i);
   });
 
+  test('get_board_content documents the { meta, content } envelope (issue #44)', () => {
+    const t = byName.get('holst_get_board_content');
+    assert.match(t.description, /\{ meta, content \}/);
+  });
+
   test('get_board_content documents the trimmed default + audit flag (issue #34)', () => {
     const t = byName.get('holst_get_board_content');
     assert.match(t.description, /trim|trimmed|live/i, 'must say the dump is trimmed');

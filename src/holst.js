@@ -358,8 +358,13 @@ export async function listBoards() {
 }
 
 /**
- * Get full board content as the underlying Yjs JSON dump:
- * { documents: { docId: text }, objects: { oid: { type, position, documentId, ... } }, ... }
+ * Get full board content. Returns the envelope `{ meta, content }` (issue #44):
+ * `meta` is the /gapi/channel record ({ id, name, workspace_id, ... }; null
+ * when that call fails), `content` is the processed Yjs JSON dump —
+ * { objects: { oid: { type, position, documentId, ... } }, documents:
+ * { docId: text }, ...non-empty aux stores } — after the
+ * trim → cap → color-normalize → shape pipeline (finalizeBoardDump).
+ * Live scripts: objects live at content.objects, NOT at the top level.
  */
 export async function getBoardContent(boardId, opts = {}) {
   assertBoardId(boardId);
