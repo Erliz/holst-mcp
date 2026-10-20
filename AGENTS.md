@@ -34,4 +34,12 @@ Electron-приложению. Форк: `Erliz/holst-mcp` (issues и PR жив�
   доска проверяется node-скриптами против кода worktree
 - Порядок при багах: systematic-debugging → root cause → TDD-фикс (тест на
   fake-holst) → проверка на живой доске по данным (bbox/positions/DOM-ректы),
-  не по скриншотам
+  не по скриншотам; для canvas-объектов rendered-доказательство —
+  `objectBoundsService.objectToBoundsMap`, не DOM-ректы
+
+## Известная среда
+
+- `worktree_create` отдаёт worktree на detached HEAD — сразу `git switch -c issue-N-<slug>`
+- `npm install` в worktree шелушит `package-lock.json` — сразу после install: `git checkout -- package-lock.json`, не ловить на верификации
+- `session_move` может обогнать создание каталога: до move — `test -d <dir>`; упал → работай явным `workdir`, каталог материализуется за секунды
+- shell изредка глотает stdout при exit=0 — пустой вывод считай неуспехом: повтори или редирект в tmp-файл + `wc -c`
